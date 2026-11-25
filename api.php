@@ -30,7 +30,7 @@ function norm_dt(?string $s): ?string {
 
 function roman_int(string $s): int {
     $s = strtoupper(trim($s));
-    $map = ['I' => 1, 'II' => 2, 'III' => 3, 'IV' => 3, 'V' => 3];
+    $map = ['I' => 1, 'II' => 2, 'III' => 3, 'IV' => 4, 'V' => 5];
     return $map[$s] ?? (int)$s;
 }
 
@@ -83,6 +83,14 @@ function split_name(string $name): array {
  * её фрагменты дозаписываются в текущую строку, пока не наберётся
  * ожидаемое число вертикальных черт.
  */
+function markdown_cells(string $line): array {
+    return preg_split('~\\\\.(*SKIP)(*F)|\|~', $line);
+}
+
+function markdown_pipes(string $line): int {
+    return count(markdown_cells($line)) - 1;
+}
+
 function assemble_md_rows(string $text): array {
     $text  = str_replace("\r", '', $text);
     $text  = preg_replace('/^\xEF\xBB\xBF/', '', $text) ?? $text; // BOM
@@ -95,8 +103,8 @@ function assemble_md_rows(string $text): array {
     foreach ($lines as $ln) {
         $ln = trim($ln);
         if ($ln === '' || $isSep($ln)) continue;
-        if (str_starts_with($ln, '|') && str_ends_with($ln, '|') && substr_count($ln, '|') >= 3) {
-            $target = substr_count($ln, '|');
+        if (str_starts_with($ln, '|') && str_ends_with($ln, '|') && markdown_pipes($ln) >= 3) {
+            $target = markdown_pipes($ln);
             break;
         }
     }
@@ -115,14 +123,14 @@ function assemble_md_rows(string $text): array {
         if ($ln === '' || $isSep($ln)) continue;
 
         if (!str_contains($ln, '|')) { // кусок ячейки вообще без «|»
-            if ($buf !== '' && substr_count($buf, '|') < $target) $buf .= ' ' . $ln;
+            if ($buf !== '' && markdown_pipes($buf) < $target) $buf .= ' ' . $ln;
             continue;
         }
         if ($buf === '') { $buf = $ln; continue; }
 
-        $complete = substr_count($buf, '|') >= $target;   // накоплена полная строка
+        $complete = markdown_pipes($buf) >= $target;   // накоплена полная строка
         $selfRow  = str_starts_with($ln, '|') && str_ends_with($ln, '|')
-                    && substr_count($ln, '|') === $target; // новая целая строка
+                    && markdown_pipes($ln) === $target; // новая целая строка
         if ($complete || $selfRow) {
             $rows[] = $buf;
             $buf = $ln;
@@ -145,7 +153,10 @@ function parse_md_table(string $text): array {
 
     foreach (assemble_md_rows($text) as $line) {
         if (preg_match('/^[\s|:\-–—]+$/u', $line)) continue;              // разделитель |---|
-        $c = array_map($clean, explode('|', trim($line, '|')));
+        $c = markdown_cells($line);
+        if ($c[0] === '') array_shift($c);
+        if (end($c) === '') array_pop($c);
+        $c = array_map(fn($cell) => $clean(strtr($cell, ['\\\\' => '\\', '\\|' => '|'])), $c);
         if (count($c) < 2) { $skipped++; continue; }
 
         // шапка — только самая первая строка, по явным признакам обоих форматов
@@ -172,32 +183,44 @@ function parse_md_table(string $text): array {
         }
         if ($title === '') { $skipped++; continue; }
 
+        $numbered = count($c) >= 13;
+        $count = max(1, min(4, roman_int($rest[$numbered ? 8 : 6] ?? '2')));
+        $dates = array_fill(1, 4, null);
+        if ($numbered) {
+            for ($round = 1; $round <= $count; $round++) {
+                $dates[$round] = parse_olymp_date($rest[$round + 1] ?? '');
+            }
+        } else {
+            $dates[1] = parse_olymp_date($rest[2] ?? '');
+            $dates[$count] ??= parse_olymp_date($rest[4] ?? '');
+        }
+
         $rows[] = [
-            'name'          => $profile !== '' ? "$title ($profile)" : $title,
-            'reg_start'     => parse_olymp_date($rest[0] ?? ''),
-            'reg_end'       => parse_olymp_date($rest[1] ?? ''),
-            'stage1_date'   => parse_olymp_date($rest[2] ?? ''),
-            'stage1_format' => trim((string)($rest[3] ?? '')),
-            'final_date'    => parse_olymp_date($rest[4] ?? ''),
-            'final_format'  => trim((string)($rest[5] ?? '')),
-            'stages_count'  => max(1, min(9, roman_int($rest[6] ?? '2'))) ?: 2,
-            'lvl'           => max(1, min(3, roman_int($rest[7] ?? '1'))) ?: 1,
+            'name' => $profile !== '' ? "$title ($profile)" : $title,
+            'reg_start' => parse_olymp_date($rest[0] ?? ''),
+            'reg_end' => parse_olymp_date($rest[1] ?? ''),
+            'dates' => $dates,
+            'stage1_format' => $rest[$numbered ? 6 : 3] ?? '',
+            'final_format' => $rest[$numbered ? 7 : 5] ?? '',
+            'stages_count' => $count,
+            'lvl' => max(1, min(3, roman_int($rest[$numbered ? 9 : 7] ?? '1'))),
         ];
     }
     return [$rows, $skipped];
 }
 
 function markdown_export(array $rows): string {
-    $out = "| № | Олимпиада | Профиль | Начало регистрации | Окончание регистрации | Дата первого этапа | Формат первого этапа | Дата финального этапа | Формат заключительного этапа | Кол-во этапов | Уровень |\n";
-    $out .= '|' . implode('|', array_fill(0, 11, '---')) . "|\n";
+    $out = "| № | Олимпиада | Профиль | Начало регистрации | Окончание регистрации | Дата 1 тура | Дата 2 тура | Дата 3 тура | Дата 4 тура | Формат 1 тура | Формат финала | Кол-во этапов | Уровень |\n";
+    $out .= '|' . implode('|', array_fill(0, 13, '---')) . "|\n";
     foreach (array_values($rows) as $i => $r) {
         [$title, $profile] = split_name((string)$r['name']);
-        $cells = [$i + 1, $title, $profile,
-            fmt_md_date($r['reg_start']), fmt_md_date($r['reg_end']),
-            fmt_md_date($r['stage1_date']), $r['stage1_format'] ?: '—',
-            fmt_md_date($r['final_date']), $r['final_format'] ?: '—',
-            $r['stages_count'], $r['lvl']];
-        $out .= '| ' . implode(' | ', array_map(fn($x) => str_replace('|', '\\|', (string)$x), $cells)) . " |\n";
+        $cells = [$i + 1, $title, $profile, fmt_md_date($r['reg_start']), fmt_md_date($r['reg_end'])];
+        for ($round = 1; $round <= 4; $round++) {
+            $cells[] = $round <= $r['stages_count'] ? fmt_md_date($r["stage{$round}_date"]) : '—';
+        }
+        array_push($cells, $r['stage1_format'], $r['final_format'], $r['stages_count'], $r['lvl']);
+        $escaped = array_map(fn($x) => strtr((string)$x, ['\\' => '\\\\', '|' => '\\|', "\r" => ' ', "\n" => ' ']), $cells);
+        $out .= '| ' . implode(' | ', $escaped) . " |\n";
     }
     return $out;
 }
@@ -235,8 +258,8 @@ try {
             $id = (int)($_POST['id'] ?? 0);
             $f  = (string)($_POST['field'] ?? '');
             $TXT = ['name', 'stage1_format', 'final_format'];
-            $DT  = ['reg_start', 'reg_end', 'stage1_date', 'final_date'];
-            $INT = ['stages_count' => [1, 9], 'lvl' => [1, 3]];
+            $DT  = ['reg_start', 'reg_end'];
+            $roundFields = ['stage1_date', 'stage2_date', 'stage3_date', 'stage4_date'];
             if ($id <= 0) out(['ok' => false, 'error' => 'нет id']);
 
             if (in_array($f, $TXT, true)) {
@@ -245,10 +268,31 @@ try {
             } elseif (in_array($f, $DT, true)) {
                 $v = norm_dt((string)($_POST['value'] ?? ''));
                 db()->prepare("UPDATE olympiads SET `$f`=? WHERE id=?")->execute([$v, $id]);
-            } elseif (isset($INT[$f])) {
-                [$lo, $hi] = $INT[$f];
-                $v = max($lo, min($hi, (int)($_POST['value'] ?? $lo)));
-                db()->prepare("UPDATE olympiads SET `$f`=? WHERE id=?")->execute([$v, $id]);
+            } elseif (($round = array_search($f, $roundFields, true)) !== false) {
+                $round++;
+                $v = norm_dt((string)($_POST['value'] ?? ''));
+                db()->prepare("UPDATE olympiads SET `$f`=?, final_date=IF(stages_count=?, ?, final_date)
+                    WHERE id=? AND stages_count>=?")->execute([$v, $round, $v, $id, $round]);
+            } elseif ($f === 'final_date') {
+                $v = norm_dt((string)($_POST['value'] ?? ''));
+                db()->prepare('UPDATE olympiads SET final_date=?,
+                    stage1_date=IF(stages_count=1, ?, stage1_date),
+                    stage2_date=IF(stages_count=2, ?, stage2_date),
+                    stage3_date=IF(stages_count=3, ?, stage3_date),
+                    stage4_date=IF(stages_count=4, ?, stage4_date)
+                    WHERE id=?')->execute([$v, $v, $v, $v, $v, $id]);
+            } elseif ($f === 'stages_count') {
+                $count = max(1, min(4, (int)($_POST['value'] ?? 1)));
+                $lastField = $roundFields[$count - 1];
+                db()->prepare("UPDATE olympiads SET stages_count=?, final_date=`$lastField`,
+                    stage2_date=IF(? >= 2, stage2_date, NULL),
+                    stage3_date=IF(? >= 3, stage3_date, NULL),
+                    stage4_date=IF(? >= 4, stage4_date, NULL),
+                    stage_attendance=stage_attendance & ? WHERE id=?")
+                    ->execute([$count, $count, $count, $count, (1 << $count) - 1, $id]);
+            } elseif ($f === 'lvl') {
+                $level = max(1, min(3, (int)($_POST['value'] ?? 1)));
+                db()->prepare('UPDATE olympiads SET lvl=? WHERE id=?')->execute([$level, $id]);
             } else {
                 out(['ok' => false, 'error' => 'неизвестное поле']);
             }
@@ -270,6 +314,24 @@ try {
             out(['ok' => true, 'registered' => (int)$st->fetchColumn()]);
         }
 
+        case 'participation': {
+            $id = (int)($_POST['id'] ?? 0);
+            $round = (int)($_POST['round'] ?? 0);
+            if ($id <= 0 || $round < 1 || $round > 4) {
+                out(['ok' => false, 'error' => 'Неверный номер тура']);
+            }
+            $bit = 1 << ($round - 1);
+            $attended = ($_POST['attended'] ?? '') === '1';
+            db()->prepare('UPDATE olympiads SET stage_attendance=(stage_attendance & ?) | ?
+                WHERE id=? AND stages_count>=?')
+                ->execute([15 ^ $bit, $attended ? $bit : 0, $id, $round]);
+            $st = db()->prepare('SELECT stage_attendance FROM olympiads WHERE id=? AND stages_count>=?');
+            $st->execute([$id, $round]);
+            $mask = $st->fetchColumn();
+            if ($mask === false) out(['ok' => false, 'error' => 'Тур не найден']);
+            out(['ok' => true, 'stage_attendance' => (int)$mask]);
+        }
+
         case 'export': {
             $rows = db()->query('SELECT * FROM olympiads ORDER BY id')->fetchAll();
             out(['ok' => true, 'md' => markdown_export($rows)]);
@@ -279,17 +341,27 @@ try {
             $md   = ensure_utf8((string)($_POST['md'] ?? ''));
             $mode = ($_POST['mode'] ?? 'append') === 'replace' ? 'replace' : 'append';
             [$parsed, $skipped] = parse_md_table($md);
-            if ($mode === 'replace' && $parsed) db()->exec('TRUNCATE TABLE olympiads');
-            $ins = db()->prepare('INSERT INTO olympiads
-                (name, reg_start, reg_end, stage1_date, stage1_format, final_date, final_format, stages_count, lvl)
-                VALUES (?,?,?,?,?,?,?,?,?)');
-            foreach ($parsed as $r) {
-                $ins->execute([
-                    ensure_utf8($r['name']), $r['reg_start'], $r['reg_end'],
-                    $r['stage1_date'], ensure_utf8($r['stage1_format']),
-                    $r['final_date'], ensure_utf8($r['final_format']),
-                    $r['stages_count'], $r['lvl'],
-                ]);
+            if ($parsed) {
+                $pdo = db();
+                $pdo->beginTransaction();
+                try {
+                    if ($mode === 'replace') $pdo->exec('DELETE FROM olympiads');
+                    $ins = $pdo->prepare('INSERT INTO olympiads
+                        (name, reg_start, reg_end, stage1_date, stage2_date, stage3_date, stage4_date,
+                         stage1_format, final_date, final_format, stages_count, lvl)
+                        VALUES (?,?,?,?,?,?,?,?,?,?,?,?)');
+                    foreach ($parsed as $r) {
+                        $ins->execute([
+                            $r['name'], $r['reg_start'], $r['reg_end'], ...array_values($r['dates']),
+                            $r['stage1_format'], $r['dates'][$r['stages_count']], $r['final_format'],
+                            $r['stages_count'], $r['lvl'],
+                        ]);
+                    }
+                    $pdo->commit();
+                } catch (Throwable $e) {
+                    $pdo->rollBack();
+                    throw $e;
+                }
             }
             out(['ok' => true, 'added' => count($parsed), 'skipped' => $skipped]);
         }
