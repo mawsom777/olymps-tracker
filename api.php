@@ -184,8 +184,11 @@ function parse_md_table(string $text): array {
         if ($title === '') { $skipped++; continue; }
 
         $numbered = count($c) >= 13;
-        $count = max(1, min(4, roman_int($rest[$numbered ? 8 : 6] ?? '2')));
+        $perRoundFormat = count($c) >= 15;
+        $countColumn = $perRoundFormat ? 10 : ($numbered ? 8 : 6);
+        $count = max(1, min(4, roman_int($rest[$countColumn] ?? '2')));
         $dates = array_fill(1, 4, null);
+        $formats = array_fill(1, 4, '');
         if ($numbered) {
             for ($round = 1; $round <= $count; $round++) {
                 $dates[$round] = parse_olymp_date($rest[$round + 1] ?? '');
@@ -195,30 +198,49 @@ function parse_md_table(string $text): array {
             $dates[$count] ??= parse_olymp_date($rest[4] ?? '');
         }
 
+        if ($perRoundFormat) {
+            for ($round = 1; $round <= $count; $round++) {
+                $formats[$round] = $rest[$round + 5] ?? '';
+            }
+        } else {
+            $formats[1] = $rest[$numbered ? 6 : 3] ?? '';
+            if ($count > 1 || $formats[1] === '' || $formats[1] === '—') {
+                $formats[$count] = $rest[$numbered ? 7 : 5] ?? '';
+            }
+        }
+        $formats = array_map('normalize_round_format', $formats);
+
         $rows[] = [
             'name' => $profile !== '' ? "$title ($profile)" : $title,
             'reg_start' => parse_olymp_date($rest[0] ?? ''),
             'reg_end' => parse_olymp_date($rest[1] ?? ''),
             'dates' => $dates,
-            'stage1_format' => $rest[$numbered ? 6 : 3] ?? '',
-            'final_format' => $rest[$numbered ? 7 : 5] ?? '',
+            'formats' => $formats,
             'stages_count' => $count,
-            'lvl' => max(1, min(3, roman_int($rest[$numbered ? 9 : 7] ?? '1'))),
+            'lvl' => max(1, min(3, roman_int($rest[$countColumn + 1] ?? '1'))),
         ];
     }
     return [$rows, $skipped];
 }
 
+function normalize_round_format(string $format): string {
+    $format = trim(ensure_utf8($format));
+    return in_array($format, ['—', '–', '-'], true) ? '' : mb_substr($format, 0, 64);
+}
+
 function markdown_export(array $rows): string {
-    $out = "| № | Олимпиада | Профиль | Начало регистрации | Окончание регистрации | Дата 1 тура | Дата 2 тура | Дата 3 тура | Дата 4 тура | Формат 1 тура | Формат финала | Кол-во этапов | Уровень |\n";
-    $out .= '|' . implode('|', array_fill(0, 13, '---')) . "|\n";
+    $out = "| № | Олимпиада | Профиль | Начало регистрации | Окончание регистрации | Дата 1 тура | Дата 2 тура | Дата 3 тура | Дата 4 тура | Формат 1 тура | Формат 2 тура | Формат 3 тура | Формат 4 тура | Кол-во этапов | Уровень |\n";
+    $out .= '|' . implode('|', array_fill(0, 15, '---')) . "|\n";
     foreach (array_values($rows) as $i => $r) {
         [$title, $profile] = split_name((string)$r['name']);
         $cells = [$i + 1, $title, $profile, fmt_md_date($r['reg_start']), fmt_md_date($r['reg_end'])];
         for ($round = 1; $round <= 4; $round++) {
             $cells[] = $round <= $r['stages_count'] ? fmt_md_date($r["stage{$round}_date"]) : '—';
         }
-        array_push($cells, $r['stage1_format'], $r['final_format'], $r['stages_count'], $r['lvl']);
+        for ($round = 1; $round <= 4; $round++) {
+            $cells[] = $round <= $r['stages_count'] ? $r["stage{$round}_format"] : '';
+        }
+        array_push($cells, $r['stages_count'], $r['lvl']);
         $escaped = array_map(fn($x) => strtr((string)$x, ['\\' => '\\\\', '|' => '\\|', "\r" => ' ', "\n" => ' ']), $cells);
         $out .= '| ' . implode(' | ', $escaped) . " |\n";
     }
@@ -257,14 +279,27 @@ try {
         case 'update': {
             $id = (int)($_POST['id'] ?? 0);
             $f  = (string)($_POST['field'] ?? '');
-            $TXT = ['name', 'stage1_format', 'final_format'];
             $DT  = ['reg_start', 'reg_end'];
             $roundFields = ['stage1_date', 'stage2_date', 'stage3_date', 'stage4_date'];
+            $formatFields = ['stage1_format', 'stage2_format', 'stage3_format', 'stage4_format'];
             if ($id <= 0) out(['ok' => false, 'error' => 'нет id']);
 
-            if (in_array($f, $TXT, true)) {
+            if ($f === 'name') {
                 $v = mb_substr(trim(ensure_utf8((string)($_POST['value'] ?? ''))), 0, 255);
-                db()->prepare("UPDATE olympiads SET `$f`=? WHERE id=?")->execute([$v, $id]);
+                db()->prepare('UPDATE olympiads SET name=? WHERE id=?')->execute([$v, $id]);
+            } elseif (($round = array_search($f, $formatFields, true)) !== false) {
+                $round++;
+                $v = normalize_round_format((string)($_POST['value'] ?? ''));
+                db()->prepare("UPDATE olympiads SET `$f`=?, final_format=IF(stages_count=?, ?, final_format)
+                    WHERE id=? AND stages_count>=?")->execute([$v, $round, $v, $id, $round]);
+            } elseif ($f === 'final_format') {
+                $v = normalize_round_format((string)($_POST['value'] ?? ''));
+                db()->prepare('UPDATE olympiads SET final_format=?,
+                    stage1_format=IF(stages_count=1, ?, stage1_format),
+                    stage2_format=IF(stages_count=2, ?, stage2_format),
+                    stage3_format=IF(stages_count=3, ?, stage3_format),
+                    stage4_format=IF(stages_count=4, ?, stage4_format)
+                    WHERE id=?')->execute([$v, $v, $v, $v, $v, $id]);
             } elseif (in_array($f, $DT, true)) {
                 $v = norm_dt((string)($_POST['value'] ?? ''));
                 db()->prepare("UPDATE olympiads SET `$f`=? WHERE id=?")->execute([$v, $id]);
@@ -284,12 +319,16 @@ try {
             } elseif ($f === 'stages_count') {
                 $count = max(1, min(4, (int)($_POST['value'] ?? 1)));
                 $lastField = $roundFields[$count - 1];
-                db()->prepare("UPDATE olympiads SET stages_count=?, final_date=`$lastField`,
+                $lastFormat = $formatFields[$count - 1];
+                db()->prepare("UPDATE olympiads SET stages_count=?, final_date=`$lastField`, final_format=`$lastFormat`,
                     stage2_date=IF(? >= 2, stage2_date, NULL),
                     stage3_date=IF(? >= 3, stage3_date, NULL),
                     stage4_date=IF(? >= 4, stage4_date, NULL),
+                    stage2_format=IF(? >= 2, stage2_format, ''),
+                    stage3_format=IF(? >= 3, stage3_format, ''),
+                    stage4_format=IF(? >= 4, stage4_format, ''),
                     stage_attendance=stage_attendance & ? WHERE id=?")
-                    ->execute([$count, $count, $count, $count, (1 << $count) - 1, $id]);
+                    ->execute([$count, $count, $count, $count, $count, $count, $count, (1 << $count) - 1, $id]);
             } elseif ($f === 'lvl') {
                 $level = max(1, min(3, (int)($_POST['value'] ?? 1)));
                 db()->prepare('UPDATE olympiads SET lvl=? WHERE id=?')->execute([$level, $id]);
@@ -348,12 +387,13 @@ try {
                     if ($mode === 'replace') $pdo->exec('DELETE FROM olympiads');
                     $ins = $pdo->prepare('INSERT INTO olympiads
                         (name, reg_start, reg_end, stage1_date, stage2_date, stage3_date, stage4_date,
-                         stage1_format, final_date, final_format, stages_count, lvl)
-                        VALUES (?,?,?,?,?,?,?,?,?,?,?,?)');
+                         stage1_format, stage2_format, stage3_format, stage4_format, final_date, final_format,
+                         stages_count, lvl)
+                        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)');
                     foreach ($parsed as $r) {
                         $ins->execute([
                             $r['name'], $r['reg_start'], $r['reg_end'], ...array_values($r['dates']),
-                            $r['stage1_format'], $r['dates'][$r['stages_count']], $r['final_format'],
+                            ...array_values($r['formats']), $r['dates'][$r['stages_count']], $r['formats'][$r['stages_count']],
                             $r['stages_count'], $r['lvl'],
                         ]);
                     }

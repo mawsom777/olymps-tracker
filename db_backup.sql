@@ -79,4 +79,15 @@ SET stage1_date = CASE WHEN stages_count = 1 THEN COALESCE(stage1_date, final_da
     stage3_date = CASE WHEN stages_count = 3 THEN final_date END,
     stage4_date = CASE WHEN stages_count = 4 THEN final_date END;
 
+ALTER TABLE olympiads
+  ADD COLUMN stage2_format VARCHAR(64) COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT '',
+  ADD COLUMN stage3_format VARCHAR(64) COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT '',
+  ADD COLUMN stage4_format VARCHAR(64) COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT '';
+
+UPDATE olympiads
+SET stage1_format = CASE WHEN stages_count = 1 AND stage1_format = '' THEN final_format ELSE stage1_format END,
+    stage2_format = CASE WHEN stages_count = 2 THEN final_format ELSE '' END,
+    stage3_format = CASE WHEN stages_count = 3 THEN final_format ELSE '' END,
+    stage4_format = CASE WHEN stages_count = 4 THEN final_format ELSE '' END;
+
 -- Dump completed on 2026-11-25 13:52:19

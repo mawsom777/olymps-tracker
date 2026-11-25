@@ -4,7 +4,8 @@ require_once __DIR__ . '/config.php';
 $rows = []; $dbOk = true; $dbErr = '';
 try {
     $rows = db()->query('SELECT id, name, reg_start, reg_end, stage1_date, stage2_date, stage3_date, stage4_date,
-            stage1_format, final_date, final_format, stages_count, lvl, registered, stage_attendance
+            stage1_format, stage2_format, stage3_format, stage4_format, final_date, final_format,
+            stages_count, lvl, registered, stage_attendance
         FROM olympiads ORDER BY id')->fetchAll();
 } catch (Throwable $e) {
     $dbOk = false; $dbErr = $e->getMessage();
@@ -75,6 +76,12 @@ button{cursor:pointer}
 .stage-controls{flex-direction:column;align-items:flex-start;gap:12px}
 #view-stages:has(#stageSchedule[hidden]) .stage-controls{max-width:900px;margin-inline:auto}
 .stage-controls .toolbar{margin:0}
+#view-stages:has(#stageSchedule[hidden]) #stageMode{box-shadow:inset 2px 2px 5px #34483b25,inset -2px -2px 5px #fff}
+#view-stages:has(#stageSchedule[hidden]) #stageMode .on{box-shadow:1px 2px 4px #34483b26}
+#view-stages:has(#stageSchedule[hidden]) #stageFilters .chip{box-shadow:2px 3px 6px #34483b1b,-2px -2px 5px #fff}
+#view-stages:has(#stageSchedule[hidden]) #stageFilters .is-pressed{
+  box-shadow:inset 2px 2px 4px #34483b2b,inset -2px -2px 5px #ffffffad
+}
 .chip{display:inline-flex;align-items:center;gap:6px;min-height:38px;padding:6px 12px;
   border:1px solid var(--line);border-radius:100px;background:var(--panel);color:var(--ink2);font-size:13px;font-weight:650}
 .chip:hover,.chip.is-pressed{border-color:#8bb69f;background:var(--green-soft);color:var(--green)}
@@ -85,7 +92,7 @@ button{cursor:pointer}
 .seg button.on{border-color:var(--line);background:var(--panel);color:var(--ink)}
 
 .tscroll{overflow:auto;max-height:63vh;min-height:210px}
-table.grid{width:100%;min-width:1990px;border-spacing:0}
+table.grid{width:100%;min-width:1690px;border-spacing:0}
 .grid th,.grid td{padding:8px;vertical-align:middle}
 .grid th{position:sticky;top:0;z-index:3;background:#eef1ed;border-bottom:1px solid var(--line);
   text-align:left;color:var(--ink2);font-size:12px}
@@ -101,7 +108,6 @@ table.grid{width:100%;min-width:1990px;border-spacing:0}
 .grid thead .c-num,.grid thead .c-title{z-index:4;background:#eef1ed}
 .c-profile{min-width:155px}
 .c-date{min-width:195px}
-.c-fmt{min-width:130px}
 .ci{width:100%;min-height:34px;padding:5px 7px;border:1px solid var(--line);border-radius:6px;background:var(--panel);font-size:13px}
 .ci::placeholder{color:var(--mut)}
 .datepair,.cell-name{display:flex;gap:5px;align-items:center}
@@ -111,6 +117,7 @@ table.grid{width:100%;min-width:1990px;border-spacing:0}
 .hint-unspec{display:block;color:var(--mut);font-size:11px;margin-top:3px}
 .round-inactive{color:var(--mut);font-size:12px}
 select.ci{width:auto}
+select.round-format{display:block;width:100%;max-width:196px;margin-top:6px}
 .del,.lvl-badge{flex:none;min-width:29px;min-height:29px;padding:3px 6px;border:1px solid var(--line);
   border-radius:6px;background:var(--panel);font-size:12px;font-weight:700}
 .del:hover,.del.armed{background:#faeae7;color:var(--red)}
@@ -121,11 +128,17 @@ select.ci{width:auto}
 #btnAdd{font-size:22px;padding:0 12px}
 .dbbanner{margin-bottom:16px;padding:12px;border:1px solid #ebc0ba;border-radius:9px;background:#fff1ee;color:var(--red)}
 
-.home-wrap{max-width:900px;margin-inline:auto;display:grid;gap:12px}
-.card{padding:15px 17px;border:1px solid var(--line);border-radius:12px;background:var(--panel)}
+.home-wrap{max-width:900px;margin-inline:auto;display:grid;gap:17px}
+.card{
+  --card-top:#f9faf7;--card-bottom:#ecf0eb;--card-edge:#dce3dd;--card-shadow:#34483b22;
+  padding:16px 18px;border:1px solid var(--card-edge);border-radius:17px;
+  background:linear-gradient(148deg,var(--card-top),var(--card-bottom));
+  box-shadow:5px 6px 13px var(--card-shadow),-4px -4px 10px #ffffffbc,inset 0 1px 1px #fff
+}
 .card-h{display:flex;align-items:center;gap:10px;margin-bottom:6px}
 .card-h h2{margin:0;font-size:18px;letter-spacing:-.025em}
-.card-h .tag,.card-h .count{font-size:11px;font-weight:700;padding:3px 7px;border-radius:6px;background:#ffffffac}
+.card-h .tag,.card-h .count{font-size:11px;font-weight:700;padding:4px 8px;border-radius:8px;
+  background:var(--card-bottom);box-shadow:inset 1px 2px 4px var(--card-shadow),inset -1px -2px 3px #ffffffa8}
 .card-h .count{margin-left:auto;font-family:var(--mono)}
 .card table{width:100%;border-collapse:collapse}
 .card td,.card th{padding:9px 5px;border-top:1px solid #17272019;vertical-align:middle;text-align:left}
@@ -138,11 +151,11 @@ select.ci{width:auto}
 .hname small.late{color:var(--red)}
 .hdate{font:600 12px/1.4 var(--mono);color:var(--ink2)}
 .hdate.cap{color:var(--mut);font:650 11px system-ui,sans-serif}
-.tone-urgent{background:#fff0ee;border-color:#e9c7c1}
+.tone-urgent{--card-top:#fff3f0;--card-bottom:#f6e3df;--card-edge:#e9ccc6;--card-shadow:#a65b4c2b}
 .tone-urgent .card-h{color:var(--red)}
-.tone-missed{background:#eef0f0;border-color:#d7dcdc}
+.tone-missed{--card-top:#f3f5f4;--card-bottom:#e6eae8;--card-edge:#d6ded9;--card-shadow:#52645b26}
 .tone-missed .card-h{color:#465451}
-.tone-soon{background:#edf7ef;border-color:#c7dfcd}
+.tone-soon{--card-top:#f1faf1;--card-bottom:#e1efdf;--card-edge:#c9dfcb;--card-shadow:#49745129}
 .tone-soon .card-h{color:var(--green)}
 .empty{padding:14px 5px;color:var(--mut);font-size:13px}
 .ck{display:inline-flex;align-items:center;justify-content:center;width:30px;height:30px;cursor:pointer}
@@ -178,6 +191,10 @@ select.ci{width:auto}
 .g-stage{position:absolute;z-index:1;display:grid;place-items:center;width:23px;height:23px;transform:translateX(-50%);
   border:1px solid #17272042;border-radius:6px;background:var(--c);color:#172720;font:750 12px var(--mono);cursor:help}
 .g-stage:focus-visible,.g-stage:hover{z-index:3}
+.g-stage.is-remote,.lg-remote i{
+  background-image:repeating-linear-gradient(-45deg,#17272042 0 2px,transparent 2px 6px)
+}
+.lg-remote i{width:14px;height:14px;border-radius:4px;border:1px solid #17272042;background-color:#e1ece6}
 #stageHint{min-height:22px;margin:6px 0;color:var(--mut);font-size:12px}
 
 .dlg{width:min(720px,94vw);padding:18px;border:1px solid var(--line);border-radius:12px;background:var(--panel);color:var(--ink)}
@@ -237,7 +254,7 @@ select.ci{width:auto}
   <div class="statline" id="statline"></div>
 
   <?php if (!$dbOk): ?>
-    <div class="dbbanner">⚠ Ошибка базы данных: <?= htmlspecialchars($dbErr) ?>. Для прежней базы примените <b>migrations/001_rounds.sql</b>.</div>
+    <div class="dbbanner">⚠ Ошибка базы данных: <?= htmlspecialchars($dbErr) ?>. Проверьте подключение и миграции в папке <b>migrations</b>.</div>
   <?php endif; ?>
 
   <main>
@@ -276,7 +293,7 @@ select.ci{width:auto}
       <div class="home-wrap" id="stageSummary"></div>
       <div id="stageSchedule" hidden>
         <div class="sched-head legend" id="stageLegend"></div>
-        <p id="stageHint" aria-live="polite">Нажмите на отметку тура, чтобы увидеть дату и время.</p>
+        <p id="stageHint" aria-live="polite">Нажмите на отметку тура, чтобы увидеть дату и формат.</p>
         <div class="gantt panel" id="stageGantt"></div>
       </div>
     </section>
@@ -295,10 +312,8 @@ select.ci{width:auto}
               <th class="c-date sortable" data-sort="reg_end">Окончание регистрации <span class="arr"></span></th>
               <th>Этапов</th>
               <?php for ($round = 1; $round <= 4; $round++): ?>
-                <th class="c-date sortable" data-sort="stage<?= $round ?>_date">Дата <?= $round ?> тура <span class="arr"></span></th>
+                <th class="c-date sortable" data-sort="stage<?= $round ?>_date"><?= $round ?> тур <span class="arr"></span></th>
               <?php endfor; ?>
-              <th class="c-fmt">Формат 1 тура</th>
-              <th class="c-fmt">Формат финала</th>
               <th>Уровень</th>
             </tr>
           </thead>
@@ -309,7 +324,7 @@ select.ci{width:auto}
         <button class="nbtn acc" id="btnAdd" aria-label="Добавить строку">+</button>
         <button class="nbtn" id="btnImport">Вставить Markdown</button>
         <button class="nbtn" id="btnExport">Скопировать Markdown</button>
-        <span style="color:var(--mut);font-size:12px;font-weight:600">Время — МСК. Без времени используется 23:59. При уменьшении числа этапов даты и отметки лишних туров удаляются.</span>
+        <span style="color:var(--mut);font-size:12px;font-weight:600">Время — МСК. Без времени используется 23:59. При уменьшении числа этапов данные лишних туров удаляются.</span>
       </div>
     </section>
   </main>
@@ -338,10 +353,10 @@ select.ci{width:auto}
 <!-- диалог импорта -->
 <dialog class="dlg" id="dlg">
   <h3>Импорт таблицы из Markdown</h3>
-  <p>Укажите число этапов от 1 до 4. Даты туров сверх этого числа оставьте пустыми. Для даты используйте «2026-12-05 14:00» (МСК) или «2026-12-05». Старые таблицы из 10 и 11 столбцов тоже поддерживаются.</p>
-  <textarea id="mdIn" rows="8" aria-label="Таблица Markdown" placeholder="| № | Олимпиада | Профиль | Начало регистрации | Окончание регистрации | Дата 1 тура | Дата 2 тура | Дата 3 тура | Дата 4 тура | Формат 1 тура | Формат финала | Кол-во этапов | Уровень |
-|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| 1 | Высшая проба | Математика | 2026-11-25 | 2026-12-01 | 2026-12-05 14:00 | 2027-02-05 | | | Заочный | Очный | 2 | I |"></textarea>
+  <p>Укажите число этапов от 1 до 4. Даты и форматы отсутствующих туров оставьте пустыми. Для формата используйте «Очно» или «Дистанционно». Для даты используйте «2026-12-05 14:00» (МСК) или «2026-12-05». Таблицы старых форматов тоже поддерживаются.</p>
+  <textarea id="mdIn" rows="8" aria-label="Таблица Markdown" placeholder="| № | Олимпиада | Профиль | Начало регистрации | Окончание регистрации | Дата 1 тура | Дата 2 тура | Дата 3 тура | Дата 4 тура | Формат 1 тура | Формат 2 тура | Формат 3 тура | Формат 4 тура | Кол-во этапов | Уровень |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| 1 | Высшая проба | Математика | 2026-11-25 | 2026-12-01 | 2026-12-05 14:00 | 2027-02-05 | | | Дистанционно | Очно | | | 2 | I |"></textarea>
   <div class="modes">
     <label><input type="radio" name="mdMode" value="append" checked> Дописать к списку</label>
     <label><input type="radio" name="mdMode" value="replace"> Заменить весь список</label>
@@ -353,9 +368,6 @@ select.ci{width:auto}
 </dialog>
 
 <div id="toast" role="status"></div>
-<datalist id="fmtList">
-  <option value="Очно"></option><option value="Дистанционно"></option><option value="Очно-дистанционно"></option>
-</datalist>
 
 <script>
 /* ================= ДАННЫЕ ================= */
@@ -376,6 +388,7 @@ const state = {
 };
 const roundNumbers = [1, 2, 3, 4];
 const stageField = round => `stage${round}_date`;
+const stageFormatField = round => `stage${round}_format`;
 const dateFields = ['reg_start', 'reg_end', ...roundNumbers.map(stageField), 'final_date'];
 
 /* ================= УТИЛИТЫ ================= */
@@ -597,6 +610,16 @@ function visibleRows(){
   });
   return rows;
 }
+function stageFormatSelect(row, round) {
+  const field = stageFormatField(round);
+  const format = row[field] || '';
+  const options = [['', 'Формат уточняется'], ['Очно', 'Очно'], ['Дистанционно', 'Дистанционно']];
+  if (!options.some(([value]) => value === format)) options.push([format, format]);
+  return `<select class="ci round-format" data-f="${field}" aria-label="Формат: ${round} тур">
+    ${options.map(([value, label]) => `<option value="${esc(value)}" ${value === format ? 'selected' : ''}>${esc(label)}</option>`).join('')}
+  </select>`;
+}
+
 function dateCell(r, f, round = null) {
   if (round && round > Number(r.stages_count)) {
     return '<td class="c-date round-inactive" title="Тур не проводится">—</td>';
@@ -606,7 +629,8 @@ function dateCell(r, f, round = null) {
   return `<td class="c-date"><div class="datepair">
       <input type="date" class="ci di" data-f="${f}" aria-label="Дата: ${label}" value="${dOf(v) ?? ''}">
       <input type="time" class="ci ti" data-f="${f}__t" aria-label="Время: ${label}" value="${tOf(v)}" title="Пусто = 23:59">
-    </div><span class="hint-unspec" ${v ? 'hidden' : ''}>Уточняется</span></td>`;
+    </div><span class="hint-unspec" ${v ? 'hidden' : ''}>Дата уточняется</span>
+    ${round ? stageFormatSelect(r, round) : ''}</td>`;
 }
 
 function rowTR(r, n) {
@@ -621,8 +645,6 @@ function rowTR(r, n) {
     ${dateCell(r,'reg_start')}${dateCell(r,'reg_end')}
     <td><select class="ci" data-f="stages_count" aria-label="Количество этапов">${options.map(x=>`<option ${+r.stages_count===x?'selected':''}>${x}</option>`).join('')}</select></td>
     ${roundNumbers.map(round => dateCell(r, stageField(round), round)).join('')}
-    <td class="c-fmt"><input class="ci" data-f="stage1_format" aria-label="Формат 1 тура" value="${esc(r.stage1_format)}" list="fmtList" placeholder="Формат"></td>
-    <td class="c-fmt"><input class="ci" data-f="final_format" aria-label="Формат финала" value="${esc(r.final_format)}" list="fmtList" placeholder="Формат"></td>
     <td style="text-align:center"><button class="lvl-badge l${+r.lvl}">У${+r.lvl}</button>
       <select class="ci" data-f="lvl" aria-label="Уровень" hidden>${[1,2,3].map(x=>`<option ${+r.lvl===x?'selected':''}>${x}</option>`).join('')}</select></td>
   </tr>`;
@@ -631,7 +653,7 @@ function renderList(){
   const rows = visibleRows();
   $('#listBody').innerHTML = rows.length
     ? rows.map((r,i)=>rowTR(r,i+1)).join('')
-    : `<tr><td colspan="13"><div class="empty">Добавьте олимпиаду или вставьте таблицу Markdown.</div></td></tr>`;
+    : `<tr><td colspan="11"><div class="empty">Добавьте олимпиаду или вставьте таблицу Markdown.</div></td></tr>`;
   $$('.grid thead th.sortable').forEach(th=>{
     const on = th.dataset.sort===state.sort.key;
     th.querySelector('.arr').textContent = on ? (state.sort.dir==='asc'?'▲':'▼') : '';
@@ -695,6 +717,7 @@ $('#listBody').addEventListener('change', async e=>{
       if (!j.row[f] && !cell.querySelector('.di').value) cell.querySelector('.ti').value = '';
     }
     renderStats();
+    if (f.endsWith('_format') && $('#view-stages').classList.contains('active')) renderStages();
   } catch (err) {
     toast(err.message);
     if (pendingRowEdits.get(id) === request && original && tr.isConnected) {
@@ -761,9 +784,19 @@ const DAY_MS = 86400000;
 const stageTime = date => Date.parse(date + 'Z');
 const stageNow = () => stageTime(mskNowISO());
 
+function roundFormat(value) {
+  const remote = /дистанц|заочн|онлайн|online/iu.test(value);
+  const onsite = /(?:^|[^а-яё])очн|офлайн|offline/iu.test(value);
+  return {
+    remote: remote && !onsite,
+    label: remote && onsite ? 'Смешанный формат' : remote ? 'Дистанционно' : onsite ? 'Очно' : ''
+  };
+}
+
 function roundsFor(row) {
   return roundNumbers.filter(round => round <= Number(row.stages_count)).map(round => ({
-    row, round, date: row[stageField(round)], attended: Boolean(row.stage_attendance & (1 << (round - 1)))
+    row, round, date: row[stageField(round)], format: roundFormat(row[stageFormatField(round)] || ''),
+    attended: Boolean(row.stage_attendance & (1 << (round - 1)))
   }));
 }
 
@@ -806,12 +839,12 @@ function renderStages() {
 }
 
 function stageCard(tone, title, entries, empty) {
-  const rows = entries.map(({row, round, date}, i) => {
+  const rows = entries.map(({row, round, date, format}, i) => {
     const [base, profile] = splitProfile(row.name);
     const check = round ? ckBox(row, round) : '';
     return `<tr><td class="hn">${i + 1}</td>
       <td class="hname"><b>${esc(base)}</b> ${profile ? `<em style="--subj:${SUBJ[subjectOf(row.name)].d}">(${esc(profile)})</em>` : ''}
-        <small>${round ? `${round} тур` : `Всего этапов: ${row.stages_count}`}</small></td>
+        <small>${round ? `${round} тур${format.label ? ` · ${esc(format.label)}` : ''}` : `Всего этапов: ${row.stages_count}`}</small></td>
       <td class="hdate">${round ? fmtDate(date) : 'Тур не проводится'}</td><td>${check}</td></tr>`;
   }).join('');
   const body = rows ? `<table aria-label="${title}"><tbody>${rows}</tbody></table>` : `<div class="empty">${empty}</div>`;
@@ -874,7 +907,7 @@ $('#stageSummary').addEventListener('change', async e => {
   }
 });
 
-const stageHint = 'Нажмите на отметку тура, чтобы увидеть дату и время.';
+const stageHint = 'Нажмите на отметку тура, чтобы увидеть дату и формат.';
 $('#stageGantt').addEventListener('click', e => {
   const marker = e.target.closest('[data-stage-detail]');
   if (marker) $('#stageHint').textContent = marker.dataset.stageDetail;
@@ -889,21 +922,25 @@ function renderStageSchedule() {
       : rounds.filter(r => r.date && (filter === 'all' || r.round === Number(filter))).sort(byStageDate);
     return {row, events};
   }).filter(entry => entry.events.length).sort((a, b) => byStageDate(a.events[0], b.events[0]));
-  renderLegend($('#stageLegend'), entries.map(entry => entry.row));
+  const legend = $('#stageLegend');
+  renderLegend(legend, entries.map(entry => entry.row));
+  if (entries.some(({events}) => events.some(event => event.format.remote))) {
+    legend.insertAdjacentHTML('beforeend', '<span class="lg lg-remote"><i aria-hidden="true"></i>Дистанционно</span>');
+  }
   $('#stageHint').textContent = stageHint;
   $('#stageHint').hidden = !entries.length;
 
   const dates = entries.flatMap(entry => entry.events.map(event => dOf(event.date)));
   renderTimeline($('#stageGantt'), dates, ({min, ppd}) => entries.map(({row, events}) => {
     const lanes = [];
-    const markers = events.map(({round, date}) => {
+    const markers = events.map(({round, date, format}) => {
       const left = (dDays(min, dOf(date)) + 0.5) * ppd;
       // Keep same-day tours and adjacent markers readable at wider date ranges.
       const free = lanes.findIndex(last => left - last >= 25);
       const lane = free === -1 ? lanes.length : free;
       lanes[lane] = left;
-      const detail = esc(`${row.name} · ${round} тур · ${fmtDate(date)}`);
-      return `<button class="g-stage" style="left:${left}px;top:${9 + lane * 27}px"
+      const detail = esc(`${row.name} · ${round} тур · ${fmtDate(date)} · ${format.label || 'Формат уточняется'}`);
+      return `<button class="g-stage${format.remote ? ' is-remote' : ''}" style="left:${left}px;top:${9 + lane * 27}px"
         data-stage-detail="${detail}" aria-label="${detail}" title="${detail}">${round}</button>`;
     }).join('');
     return timelineRow(row, markers, '', Math.max(49, lanes.length * 27 + 17));
