@@ -3,13 +3,15 @@ declare(strict_types=1);
 require_once __DIR__ . '/config.php';
 $rows = []; $dbOk = true; $dbErr = '';
 try {
-    $rows = db()->query('SELECT * FROM olympiads ORDER BY id')->fetchAll();
+    $rows = db()->query('SELECT id, name, reg_start, reg_end, stage1_date, stage2_date, stage3_date, stage4_date,
+            stage1_format, final_date, final_format, stages_count, lvl, registered, stage_attendance
+        FROM olympiads ORDER BY id')->fetchAll();
 } catch (Throwable $e) {
     $dbOk = false; $dbErr = $e->getMessage();
 }
 function row_out(array $r): array {
-    foreach (['reg_start','reg_end','stage1_date','final_date'] as $f)
-        if ($r[$f]) $r[$f] = str_replace(' ', 'T', $r[$f]);
+    foreach (['reg_start','reg_end','stage1_date','stage2_date','stage3_date','stage4_date','final_date'] as $f)
+        if (!empty($r[$f])) $r[$f] = str_replace(' ', 'T', $r[$f]);
     return $r;
 }
 $rows = array_map('row_out', $rows);
@@ -20,326 +22,222 @@ $rows = array_map('row_out', $rows);
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Олимп·Трекер — контроль олимпиад</title>
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Unbounded:wght@500;700;900&family=Manrope:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;600;700&display=swap" rel="stylesheet">
 <style>
 :root{
-  --bg:#e6eaf2; --panel:#e9edf5;
-  --ink:#3a4258; --ink2:#5d6780; --mut:#8b94a8;
-  --dark:#c3cbdd; --light:#ffffff;
-  --lime:#b7e06f; --lime-d:#79a83c;
-  --sky:#9ec9ea;  --sky-d:#5a8fbc;
-  --rose:#f2a9a0; --rose-d:#c96b5e;
-  --mint:#93ddcd; --mint-d:#47a592;
-  --butter:#f4d98c; --lav:#c6b9ea; --gray:#cfd5e0;
+  --bg:#f6f7f4; --panel:#fff; --line:#dce2dc;
+  --ink:#172720; --ink2:#3d5046; --mut:#55665d;
+  --green:#21654c; --green-soft:#e5f3e9; --red:#9b3c34; --gray:#a1aea6;
+  --mono:ui-monospace, "SFMono-Regular", Consolas, monospace;
   --rl:240px;
 }
-*{box-sizing:border-box; margin:0}
-html{scroll-behavior:smooth}
-body{
-  background:var(--bg); color:var(--ink);
-  font:15px/1.55 "Manrope",system-ui,sans-serif;
-  padding:22px 16px 132px; min-height:100vh;
-}
-.bg-deco{position:fixed; inset:0; z-index:-1; pointer-events:none;
-  background:
-    radial-gradient(52rem 32rem at 88% -8%, rgba(158,201,234,.34), transparent 62%),
-    radial-gradient(46rem 30rem at -10% 22%, rgba(183,224,111,.26), transparent 60%),
-    radial-gradient(40rem 26rem at 108% 88%, rgba(242,169,160,.20), transparent 60%),
-    radial-gradient(36rem 24rem at 6% 96%, rgba(147,221,205,.20), transparent 60%),
-    radial-gradient(rgba(90,105,140,.06) 1px, transparent 1.4px);
-  background-size:auto,auto,auto,auto,23px 23px;
-}
-.wrap{max-width:1180px; margin:0 auto}
-::selection{background:rgba(183,224,111,.55)}
-:focus-visible{outline:3px solid rgba(121,168,60,.45); outline-offset:2px; border-radius:8px}
-::-webkit-scrollbar{height:10px;width:10px}
-::-webkit-scrollbar-thumb{background:#c9d1e2;border-radius:99px;border:2px solid var(--bg)}
-::-webkit-scrollbar-track{background:transparent}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.5 system-ui,sans-serif;
+  padding:32px 20px 108px;min-height:100vh}
+button,input,select,textarea{font:inherit;color:inherit}
+button{cursor:pointer}
+[hidden]{display:none!important}
+:focus-visible{outline:2px solid var(--green);outline-offset:3px}
+.wrap{max-width:1180px;margin:auto}
+.panel{border:1px solid var(--line);border-radius:14px;background:var(--panel)}
+.nbtn{display:inline-flex;align-items:center;justify-content:center;gap:8px;min-height:40px;
+  padding:8px 14px;border:1px solid var(--line);border-radius:8px;background:var(--panel);font-size:13px;font-weight:650}
+.nbtn:hover{background:var(--green-soft)}
+.nbtn.acc{background:var(--green);border-color:var(--green);color:#fff}
+.nbtn.acc:hover{background:#174b38}
+.nbtn.ghost{background:transparent}
 
-/* ---- неоморфные поверхности ---- */
-.neu{background:linear-gradient(148deg,#eef2f9,#dfe4ef);
-  box-shadow:9px 9px 22px var(--dark), -9px -9px 22px var(--light);
-  border-radius:20px}
-.neu-in{box-shadow:inset 5px 5px 12px rgba(178,187,207,.8), inset -6px -6px 12px #fff;
-  background:#e4e8f1}
-.nbtn{display:inline-flex;align-items:center;gap:8px;justify-content:center;
-  border:0;cursor:pointer;color:var(--ink);font:700 13.5px "Manrope";
-  padding:11px 18px;border-radius:14px;background:linear-gradient(148deg,#eef2f9,#dfe4ef);
-  box-shadow:6px 6px 14px var(--dark), -6px -6px 14px var(--light);
-  transition:transform .16s, box-shadow .16s, color .16s}
-.nbtn:hover{transform:translateY(-2px)}
-.nbtn:active{box-shadow:inset 4px 4px 9px var(--dark), inset -5px -5px 10px #fff; transform:translateY(0)}
-.nbtn.acc{background:linear-gradient(148deg,#cdeb97,#a9d163); color:#3c5417;
-  box-shadow:6px 6px 14px rgba(121,168,60,.35), -6px -6px 14px #fff}
-.nbtn.ghost{box-shadow:none;background:transparent;color:var(--mut)}
-.nbtn.ghost:hover{color:var(--ink)}
+.top{display:flex;justify-content:space-between;align-items:center;gap:16px;padding-bottom:17px}
+.brand{display:flex;align-items:center;gap:12px}
+.brand-badge{display:grid;place-items:center;width:42px;height:42px;border-radius:10px;background:var(--green);color:#fff;font-size:22px}
+.brand h1{margin:0;font-size:clamp(23px,4vw,34px);line-height:1.12;letter-spacing:-.045em}
+.brand h1 em{font-style:normal;color:var(--green)}
+.clock{text-align:right}
+.clock b{font:650 18px var(--mono);white-space:nowrap}
+.clock b i{font-style:normal}
+.clock small{display:block;color:var(--mut);font-size:12px}
+.clock .tz{font-size:10px;font-weight:750;color:var(--green);margin-left:5px}
+.statline{display:flex;flex-wrap:wrap;gap:3px 24px;border-block:1px solid var(--line);
+  padding:10px 0;margin:0 0 24px;color:var(--mut);font-size:13px}
+.statline b{color:var(--ink)}
 
-/* ---- шапка ---- */
-header.top{display:flex;justify-content:space-between;align-items:flex-end;gap:18px;flex-wrap:wrap;margin-bottom:14px}
-.brand{display:flex;align-items:center;gap:14px}
-.brand-badge{width:56px;height:56px;border-radius:18px;display:grid;place-items:center;
-  font:900 24px "Unbounded";color:#4c6a1f;background:linear-gradient(148deg,#d3ef9f,#aad45f);
-  box-shadow:6px 6px 14px rgba(121,168,60,.35), -6px -6px 14px #fff}
-.brand h1{font:900 clamp(22px,4vw,34px)/1 "Unbounded"; letter-spacing:.5px}
-.brand h1 em{font-style:normal;color:var(--lime-d)}
-.brand p{color:var(--mut);font-weight:600;font-size:13px;margin-top:5px;letter-spacing:.4px}
-.clock{padding:10px 18px;border-radius:16px;text-align:right;min-width:172px}
-.clock b{font:700 24px/1 "JetBrains Mono";letter-spacing:1px}
-.clock b i{font-style:normal;animation:blink 1s steps(1) infinite}
-.clock small{display:block;color:var(--mut);font-weight:700;font-size:12px;margin-top:3px;text-transform:capitalize}
-.clock .tz{display:inline-block;margin-top:4px;font:700 10px "Manrope";letter-spacing:2px;color:#fff;
-  background:var(--sky-d);padding:2px 8px;border-radius:99px}
-@keyframes blink{50%{opacity:.25}}
-.statline{margin:0 0 22px;padding:11px 18px;border-radius:14px;display:flex;gap:10px 22px;flex-wrap:wrap;
-  font-size:13px;font-weight:600;color:var(--ink2)}
-.statline b{font-family:"JetBrains Mono";color:var(--ink)}
-.statline .dot{display:inline-block;width:8px;height:8px;border-radius:99px;background:var(--lime);margin-right:7px;vertical-align:1px}
-
-/* ---- вкладки / навигация ---- */
 .view{display:none}
 .view.active{display:block}
-.view.active > *{animation:rise .5s cubic-bezier(.22,.9,.3,1) both}
-.view.active > *:nth-child(2){animation-delay:.07s}
-.view.active > *:nth-child(3){animation-delay:.14s}
-@keyframes rise{from{opacity:0;transform:translateY(16px)}}
-.tabbar{position:fixed;left:50%;transform:translateX(-50%);
-  bottom:calc(14px + env(safe-area-inset-bottom));z-index:50;
-  display:flex;gap:8px;padding:9px;border-radius:24px;max-width:94vw}
-.tab{position:relative;display:flex;flex-direction:column;align-items:center;gap:4px;justify-content:center;
-  width:104px;height:64px;border:0;border-radius:17px;cursor:pointer;background:transparent;
-  color:var(--mut);font:700 12px "Manrope";transition:all .2s}
-.tab svg{width:23px;height:23px;stroke:currentColor;fill:none;stroke-width:1.9;stroke-linecap:round;stroke-linejoin:round;transition:transform .2s}
-.tab:hover{color:var(--ink)}
-.tab:hover svg{transform:translateY(-2px)}
-.tab.is-pressed{color:var(--ink);background:#e3e8f1;
-  box-shadow:inset 5px 5px 11px rgba(178,187,207,.85), inset -6px -6px 11px #fff}
-.tab.is-pressed svg{stroke:var(--acc)}
-.tab.is-pressed::after{content:"";position:absolute;bottom:8px;width:22px;height:4px;border-radius:99px;background:var(--acc)}
+.tabbar{position:fixed;left:50%;bottom:calc(12px + env(safe-area-inset-bottom));z-index:50;
+  transform:translateX(-50%);display:grid;grid-template-columns:repeat(4,minmax(0,1fr));
+  width:min(430px,calc(100% - 20px));gap:4px;padding:5px;border-radius:14px;
+  box-shadow:0 4px 14px #17272014}
+.tab{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;
+  min-height:50px;padding:5px 2px;border:0;border-radius:8px;background:transparent;color:var(--mut);font-size:12px;font-weight:650}
+.tab svg{width:19px;height:19px;stroke:currentColor;fill:none;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+.tab:hover,.tab.is-pressed{background:var(--green-soft);color:var(--green)}
 
-/* ---- фильтры-чипы ---- */
-.toolbar{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:18px}
-.chip{border:0;cursor:pointer;padding:10px 16px;border-radius:99px;font:700 13px "Manrope";color:var(--ink2);
-  background:linear-gradient(148deg,#eef2f9,#dfe4ef);
-  box-shadow:5px 5px 12px var(--dark), -5px -5px 12px #fff;transition:all .16s;display:inline-flex;gap:8px;align-items:center}
-.chip .cdot{width:9px;height:9px;border-radius:99px;background:var(--cc,var(--gray))}
-.chip:hover{transform:translateY(-2px)}
-.chip.is-pressed{box-shadow:inset 4px 4px 9px rgba(178,187,207,.85), inset -5px -5px 9px #fff;color:var(--ink)}
-.chip.is-pressed .cdot{box-shadow:0 0 0 3px color-mix(in srgb,var(--cc) 30%, transparent)}
-.toolbar .spacer{flex:1}
+.toolbar,.sched-head,.stage-controls{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin:0 0 14px}
+.stage-controls{flex-direction:column;align-items:flex-start;gap:12px}
+#view-stages:has(#stageSchedule[hidden]) .stage-controls{max-width:900px;margin-inline:auto}
+.stage-controls .toolbar{margin:0}
+.chip{display:inline-flex;align-items:center;gap:6px;min-height:38px;padding:6px 12px;
+  border:1px solid var(--line);border-radius:100px;background:var(--panel);color:var(--ink2);font-size:13px;font-weight:650}
+.chip:hover,.chip.is-pressed{border-color:#8bb69f;background:var(--green-soft);color:var(--green)}
+.chip .cdot,.lg i{width:8px;height:8px;border-radius:50%;background:var(--cc,var(--gray))}
+.seg{display:inline-flex;gap:2px;padding:3px;border:1px solid var(--line);border-radius:9px;background:#ebefeb}
+.seg button{min-height:34px;padding:5px 12px;border:1px solid transparent;border-radius:6px;
+  background:transparent;color:var(--mut);font-size:13px;font-weight:650}
+.seg button.on{border-color:var(--line);background:var(--panel);color:var(--ink)}
 
-/* ---- таблица «Список» ---- */
-.tscroll{overflow:auto;max-height:calc(100vh - 300px);min-height:220px;border-radius:20px;padding:6px}
-table.grid{border-collapse:separate;border-spacing:0;min-width:1720px;width:100%}
-.grid th,.grid td{vertical-align:middle}
-.grid thead th{position:sticky;top:0;z-index:6;background:#e9edf5;text-align:left;
-  font:800 11px "Manrope";text-transform:uppercase;letter-spacing:.7px;color:var(--mut);
-  padding:13px 10px;box-shadow:0 8px 12px -10px rgba(90,102,130,.45)}
-.grid thead th.sortable{cursor:pointer;user-select:none}
-.grid thead th.sortable:hover{color:var(--ink)}
-.grid thead th .arr{font-size:10px;opacity:.85}
-.grid tbody tr{transition:background .15s}
-.grid tbody tr:hover{background:#edf1f8}
-.grid td{padding:8px 8px;border-top:1px solid #dde3ee}
-.c-num{width:46px;text-align:center;font:700 12px "JetBrains Mono";color:var(--mut);
-  position:sticky;left:0;z-index:5;background:#e9edf5;box-shadow:6px 0 10px -8px rgba(90,102,130,.5)}
-.c-title{width:230px;position:sticky;left:46px;z-index:5;background:#e9edf5;box-shadow:6px 0 10px -8px rgba(90,102,130,.5)}
-.c-profile{width:170px;position:sticky;left:205px;z-index:5;background:#e9edf5;box-shadow:6px 0 10px -8px rgba(90,102,130,.5)}
-.grid thead .c-num,.grid thead .c-title,.grid thead .c-profile{z-index:7}
-.grid thead .c-num{left:0}
-.grid thead .c-title{left:46px}
-.grid thead .c-profile{left:210px}
-tr.sub-Математика .c-profile{box-shadow:inset 4px 0 0 -1px var(--lime), 6px 0 10px -8px rgba(90,102,130,.5)}
-tr.sub-Физика .c-profile{box-shadow:inset 4px 0 0 -1px var(--sky), 6px 0 10px -8px rgba(90,102,130,.5)}
-tr.sub-Информатика .c-profile{box-shadow:inset 4px 0 0 -1px var(--mint), 6px 0 10px -8px rgba(90,102,130,.5)}
-tr.sub-Русский .c-profile{box-shadow:inset 4px 0 0 -1px var(--rose), 6px 0 10px -8px rgba(90,102,130,.5)}
-.c-date{min-width:196px}
-.c-fmt{min-width:140px}
-.ci{border:0;font:600 13px "Manrope";color:var(--ink);border-radius:10px;padding:8px 9px;width:100%;
-  background:#e3e8f1;box-shadow:inset 3px 3px 7px rgba(178,187,207,.75), inset -4px -4px 8px #fff;transition:box-shadow .15s}
-.ci:focus{outline:none;box-shadow:inset 3px 3px 7px rgba(178,187,207,.85), 0 0 0 2px rgba(121,168,60,.35)}
-.ci::placeholder{color:#a9b1c3;font-weight:500}
-input.ci[type=date],input.ci[type=time]{font-family:"JetBrains Mono";font-size:12px}
-.datepair{display:flex;gap:6px}
-.datepair .di{width:128px}.datepair .ti{width:90px}
-.hint-unspec{display:block;font-size:10.5px;color:var(--mut);margin-top:4px;font-weight:600}
-select.ci{appearance:none;cursor:pointer;width:auto}
-.cell-name{display:flex;align-items:center;gap:8px}
-.cell-name .ci{flex:1}
-.del{flex:none;width:30px;height:30px;border:0;border-radius:10px;cursor:pointer;color:var(--mut);
-  font-size:13px;font-weight:800;background:transparent;transition:all .15s;
-  box-shadow:3px 3px 8px var(--dark), -3px -3px 8px #fff}
-.del:hover{color:var(--rose-d)}
-.del.armed{background:linear-gradient(148deg,#f6b1a8,#e88d81);color:#fff;box-shadow:none;
-  width:auto;padding:0 10px;font-size:11px;animation:pulseDel 1s infinite}
-@keyframes pulseDel{50%{filter:brightness(1.12)}}
-.lvl-badge{display:inline-grid;place-items:center;width:34px;height:34px;border-radius:12px;
-  font:800 12px "Manrope";color:#41531c;background:linear-gradient(148deg,#d7eeab,#b9dd78);
-  box-shadow:3px 3px 8px var(--dark), -3px -3px 8px #fff}
-.lvl-badge.l2{background:linear-gradient(148deg,#c4dcf2,#9cc4e4);color:#274b6b}
-.lvl-badge.l3{background:linear-gradient(148deg,#f7e3ac,#eecf7d);color:#6b5316}
-.list-foot{display:flex;gap:12px;align-items:center;flex-wrap:wrap;margin-top:18px}
-#btnAdd{width:56px;height:56px;border-radius:18px;font-size:26px;padding:0}
-.dbbanner{margin-bottom:16px;padding:14px 18px;border-radius:16px;background:#fbe9e6;color:#8f3d31;
-  font-weight:600;font-size:13.5px;box-shadow:inset 4px 4px 10px rgba(200,140,130,.35), inset -5px -5px 10px #fff}
+.tscroll{overflow:auto;max-height:63vh;min-height:210px}
+table.grid{width:100%;min-width:1990px;border-spacing:0}
+.grid th,.grid td{padding:8px;vertical-align:middle}
+.grid th{position:sticky;top:0;z-index:3;background:#eef1ed;border-bottom:1px solid var(--line);
+  text-align:left;color:var(--ink2);font-size:12px}
+.grid td{border-bottom:1px solid #edf0ec}
+.grid tbody tr:hover{background:#f6f9f6}
+.grid .sortable{cursor:pointer}
+.grid .sortable:hover{color:var(--green)}
+.grid .arr{font-size:9px}
+.grid .c-num{width:40px;min-width:40px;text-align:center;font:600 12px var(--mono);color:var(--mut)}
+.grid .c-title{width:220px;min-width:220px}
+.grid .c-num,.grid .c-title{position:sticky;left:0;z-index:2;background:var(--panel)}
+.grid .c-title{left:40px;border-right:1px solid var(--line)}
+.grid thead .c-num,.grid thead .c-title{z-index:4;background:#eef1ed}
+.c-profile{min-width:155px}
+.c-date{min-width:195px}
+.c-fmt{min-width:130px}
+.ci{width:100%;min-height:34px;padding:5px 7px;border:1px solid var(--line);border-radius:6px;background:var(--panel);font-size:13px}
+.ci::placeholder{color:var(--mut)}
+.datepair,.cell-name{display:flex;gap:5px;align-items:center}
+.datepair .ci{min-width:0;font:12px var(--mono)}
+.datepair .di{width:115px}
+.datepair .ti{width:76px}
+.hint-unspec{display:block;color:var(--mut);font-size:11px;margin-top:3px}
+.round-inactive{color:var(--mut);font-size:12px}
+select.ci{width:auto}
+.del,.lvl-badge{flex:none;min-width:29px;min-height:29px;padding:3px 6px;border:1px solid var(--line);
+  border-radius:6px;background:var(--panel);font-size:12px;font-weight:700}
+.del:hover,.del.armed{background:#faeae7;color:var(--red)}
+.lvl-badge{background:var(--green-soft);color:var(--green)}
+.lvl-badge.l2{background:#edf4fb;color:#26577c}
+.lvl-badge.l3{background:#fbf2de;color:#704d15}
+.list-foot{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-top:12px}
+#btnAdd{font-size:22px;padding:0 12px}
+.dbbanner{margin-bottom:16px;padding:12px;border:1px solid #ebc0ba;border-radius:9px;background:#fff1ee;color:var(--red)}
 
-/* ---- «Домой» ---- */
-.home-wrap{max-width:780px;margin:0 auto;display:flex;flex-direction:column;gap:26px}
-.card{padding:20px 22px 14px;border-radius:24px;transition:transform .2s}
-.card:hover{transform:translateY(-2px)}
-.card-h{display:flex;align-items:center;gap:12px;margin-bottom:14px}
-.card-h h2{font:800 clamp(15px,2.4vw,19px) "Unbounded";letter-spacing:.5px}
-.card-h .tag{font:800 10px "Manrope";letter-spacing:1.6px;text-transform:uppercase;padding:4px 10px;border-radius:99px;color:#fff}
-.card-h .count{margin-left:auto;font:700 13px "JetBrains Mono";padding:4px 12px;border-radius:99px;background:#e2e7f0;
-  box-shadow:inset 3px 3px 6px rgba(178,187,207,.8), inset -3px -3px 6px #fff}
+.home-wrap{max-width:900px;margin-inline:auto;display:grid;gap:12px}
+.card{padding:15px 17px;border:1px solid var(--line);border-radius:12px;background:var(--panel)}
+.card-h{display:flex;align-items:center;gap:10px;margin-bottom:6px}
+.card-h h2{margin:0;font-size:18px;letter-spacing:-.025em}
+.card-h .tag,.card-h .count{font-size:11px;font-weight:700;padding:3px 7px;border-radius:6px;background:#ffffffac}
+.card-h .count{margin-left:auto;font-family:var(--mono)}
 .card table{width:100%;border-collapse:collapse}
-.card td{padding:10px 6px;border-top:1px solid #d9dfea;vertical-align:middle}
-.card tr:first-child td{border-top:0}
-.card tbody tr{transition:background .15s}
-.card tbody tr:hover{background:rgba(255,255,255,.4)}
-.hn{width:34px;font:700 12px "JetBrains Mono";color:var(--mut);text-align:center}
-.hname b{font-weight:800;font-size:14.5px}
-.hname em{font-style:normal;font-weight:700;font-size:12.5px;color:var(--subj)}
-.hname small{display:block;color:var(--mut);font-weight:600;font-size:11.5px;margin-top:2px}
-.hname small.late{color:var(--rose-d)}
-.hdate{font:600 12px "JetBrains Mono";color:var(--ink2);white-space:nowrap}
-.hdate.cap{color:var(--mut);text-transform:uppercase;font:800 10px "Manrope";letter-spacing:.7px;padding-bottom:4px}
-.tone-urgent{background:linear-gradient(150deg,#fae6e2,#f2d5d0);animation:glowU 3s ease-in-out infinite}
-.tone-urgent .card-h h2{color:#96423a}
-.tone-urgent .tag{background:var(--rose-d)}
-.tone-urgent .count{background:#f6ddd8;box-shadow:inset 3px 3px 6px rgba(201,107,94,.3), inset -3px -3px 6px #fff}
-@keyframes glowU{0%,100%{box-shadow:9px 9px 22px rgba(201,107,94,.28), -9px -9px 22px #fff}
-  50%{box-shadow:9px 9px 28px rgba(201,107,94,.45), -9px -9px 22px #fff}}
-.tone-missed{background:linear-gradient(150deg,#e8eaee,#dde0e7)}
-.tone-missed .card-h h2{color:#5d6478}
-.tone-missed .tag{background:#8a91a4}
-.tone-soon{background:linear-gradient(150deg,#e9f0f3,#e0e9ec)}
-.tone-soon .card-h h2{color:#2f5d63}
-.tone-soon .tag{background:var(--mint-d)}
-.empty{padding:18px 10px;text-align:center;color:var(--mut);font-weight:600;font-size:13.5px}
-.empty b{display:block;font-size:22px;margin-bottom:4px}
-.ck{display:inline-grid;place-items:center;cursor:pointer}
-.ck input{position:absolute;opacity:0;width:0}
-.ck span{width:28px;height:28px;border-radius:10px;display:grid;place-items:center;color:transparent;
-  background:#e3e8f1;box-shadow:inset 3px 3px 7px rgba(178,187,207,.8), inset -4px -4px 8px #fff;
-  transition:all .18s;font-weight:900;font-size:14px}
-.ck:hover span{box-shadow:inset 3px 3px 7px rgba(178,187,207,.9), 0 0 0 3px rgba(121,168,60,.18)}
-.ck input:checked + span{background:linear-gradient(148deg,#cdeb97,#a9d163);color:#3c5417;
-  box-shadow:3px 3px 8px rgba(121,168,60,.35), -3px -3px 8px #fff;animation:pop .3s cubic-bezier(.2,1.6,.4,1)}
-@keyframes pop{from{transform:scale(.6)}}
+.card td,.card th{padding:9px 5px;border-top:1px solid #17272019;vertical-align:middle;text-align:left}
+.card td:last-child{text-align:right}
+.hn{width:27px;color:var(--mut);font:600 11px var(--mono)}
+.hname{overflow-wrap:anywhere}
+.hname b{font-size:14px;font-weight:700}
+.hname em{color:var(--subj);font-style:normal;font-size:12px}
+.hname small{display:block;color:var(--mut);font-size:12px}
+.hname small.late{color:var(--red)}
+.hdate{font:600 12px/1.4 var(--mono);color:var(--ink2)}
+.hdate.cap{color:var(--mut);font:650 11px system-ui,sans-serif}
+.tone-urgent{background:#fff0ee;border-color:#e9c7c1}
+.tone-urgent .card-h{color:var(--red)}
+.tone-missed{background:#eef0f0;border-color:#d7dcdc}
+.tone-missed .card-h{color:#465451}
+.tone-soon{background:#edf7ef;border-color:#c7dfcd}
+.tone-soon .card-h{color:var(--green)}
+.empty{padding:14px 5px;color:var(--mut);font-size:13px}
+.ck{display:inline-flex;align-items:center;justify-content:center;width:30px;height:30px;cursor:pointer}
+.ck input{width:18px;height:18px;margin:0;accent-color:var(--green);cursor:pointer}
 
-/* ---- «Расписание» (гантт) ---- */
-.sched-head{display:flex;gap:12px;flex-wrap:wrap;align-items:center;margin-bottom:16px}
-.legend{display:flex;gap:8px;flex-wrap:wrap}
-.lg{display:inline-flex;align-items:center;gap:7px;font:700 12px "Manrope";color:var(--ink2);
-  padding:7px 13px;border-radius:99px;background:#e7ebf3;
-  box-shadow:inset 3px 3px 7px rgba(178,187,207,.7), inset -4px -4px 8px #fff}
-.lg i{width:11px;height:11px;border-radius:99px;background:var(--cc)}
+.legend{display:flex;gap:6px;flex-wrap:wrap}
+.lg{display:inline-flex;align-items:center;gap:5px;padding:5px 8px;border:1px solid var(--line);
+  border-radius:6px;background:var(--panel);color:var(--ink2);font-size:12px}
 .lg small{color:var(--mut)}
-.seg{display:inline-flex;padding:5px;border-radius:14px;background:#e2e7f0;
-  box-shadow:inset 4px 4px 9px rgba(178,187,207,.8), inset -5px -5px 10px #fff}
-.seg button{border:0;background:transparent;cursor:pointer;padding:7px 14px;border-radius:10px;
-  font:700 12px "Manrope";color:var(--mut);transition:all .15s}
-.seg button.on{background:linear-gradient(148deg,#eef2f9,#e0e5ef);color:var(--ink);
-  box-shadow:3px 3px 7px var(--dark), -3px -3px 7px #fff}
-.gantt{padding:10px 0 6px;overflow:hidden}
-.g-scroll{overflow-x:auto;overflow-y:hidden}
-.g-inner{position:relative;padding-bottom:8px}
-.g-inner::after{content:"";position:absolute;top:64px;bottom:6px;left:calc(var(--rl) + var(--today-x));
-  width:2px;border-radius:2px;background:var(--rose-d);opacity:.75;box-shadow:0 0 8px rgba(201,107,94,.6)}
-.g-headrow{display:grid;grid-template-columns:var(--rl) var(--tw)}
-.g-hlab{position:sticky;left:0;z-index:4;background:linear-gradient(148deg,#eef2f9,#e2e7f1);
-  border-radius:12px;margin:2px 8px 2px 10px;display:flex;align-items:center;padding:0 12px;
-  font:800 10px "Manrope";letter-spacing:1.2px;text-transform:uppercase;color:var(--mut)}
-.g-htl{position:relative;height:60px;margin-right:10px}
-.g-month{position:absolute;top:8px;height:24px;display:flex;align-items:center;padding:0 10px;border-left:2px solid #ccd4e4;
-  font:800 11px "Manrope";letter-spacing:.8px;text-transform:uppercase;color:var(--ink2);white-space:nowrap}
-.g-tick{position:absolute;bottom:6px;transform:translateX(-50%);font:600 10px "JetBrains Mono";color:var(--mut)}
-.g-row{display:grid;grid-template-columns:var(--rl) var(--tw);align-items:center;animation:rise .45s both}
-.g-label{position:sticky;left:0;z-index:3;margin:4px 8px 4px 10px;padding:8px 12px;border-radius:13px;
-  background:linear-gradient(148deg,#eef2f9,#e3e8f2);box-shadow:4px 4px 10px rgba(178,187,207,.55), -4px -4px 10px #fff;
-  display:flex;gap:10px;align-items:center;min-height:52px;transition:transform .15s}
-.g-row:hover .g-label{transform:translateX(3px)}
-.g-label .dot{flex:none;width:12px;height:12px;border-radius:99px;background:var(--c);box-shadow:0 0 0 4px color-mix(in srgb,var(--c) 25%, transparent)}
-.g-label b{display:block;font-size:12.5px;font-weight:800;line-height:1.25}
-.g-label small{color:var(--mut);font:600 10.5px "JetBrains Mono"}
-.g-track{position:relative;height:52px;margin-right:10px;
-  background:repeating-linear-gradient(90deg, rgba(140,152,180,.16) 0 1px, transparent 1px var(--ppd))}
-.g-bar{position:absolute;top:7px;height:38px;border-radius:11px;display:flex;flex-direction:column;justify-content:center;
-  padding:0 12px;overflow:hidden;white-space:nowrap;cursor:default;min-width:26px;
-  background:linear-gradient(135deg, color-mix(in srgb,var(--c) 88%, #fff), color-mix(in srgb,var(--c) 72%, #46536e));
-  box-shadow:4px 4px 10px rgba(90,102,130,.28), inset 0 1px 0 rgba(255,255,255,.5);
-  transform-origin:left;animation:grow .6s cubic-bezier(.25,.9,.3,1) both;transition:transform .15s, box-shadow .15s}
-.g-row:hover .g-bar{transform:translateY(-2px) scale(1.005);box-shadow:6px 8px 14px rgba(90,102,130,.35)}
-.g-bar b{font-size:12px;font-weight:800;color:#333e55}
-.g-bar span{font:600 10px "JetBrains Mono";color:rgba(51,62,85,.72)}
-.g-bar.unspec{position:static;width:auto;margin:7px 12px 7px 0;border:2px dashed #b6bfd2;background:transparent;box-shadow:none;
-  display:flex;flex-direction:row;align-items:center;gap:8px;color:var(--mut)}
-@keyframes grow{from{transform:scaleX(0);opacity:.3}}
+.gantt{overflow:hidden}
+.gantt>.empty{padding:16px}
+.g-scroll{overflow:auto}
+.g-inner{position:relative;width:max-content;min-width:100%}
+.g-inner.is-today::after{content:"";position:absolute;top:54px;bottom:0;left:calc(var(--rl) + var(--today-x));
+  width:1px;background:#b9554a;pointer-events:none}
+.g-headrow,.g-row{display:grid;grid-template-columns:var(--rl) var(--tw);border-bottom:1px solid var(--line)}
+.g-hlab,.g-label{position:sticky;left:0;z-index:2;display:flex;align-items:center;gap:8px;
+  padding:8px 11px;border-right:1px solid var(--line);background:var(--panel)}
+.g-hlab{background:#eef1ed;font-size:12px;font-weight:700}
+.g-htl{position:relative;height:54px;background:#f2f5f2}
+.g-month{position:absolute;top:5px;padding:1px 6px;border-left:1px solid #c5d0c9;white-space:nowrap;
+  color:var(--ink2);font-size:11px;font-weight:700}
+.g-tick{position:absolute;bottom:5px;transform:translateX(-50%);color:var(--mut);font:10px var(--mono)}
+.g-label .dot{flex:none;width:8px;height:8px;border-radius:50%;background:var(--c)}
+.g-label b{display:block;font-size:12px;line-height:1.25;overflow-wrap:anywhere}
+.g-label small{color:var(--mut);font-size:11px}
+.g-track{position:relative;min-height:49px;background:repeating-linear-gradient(90deg,#e9eeea 0 1px,transparent 1px var(--ppd))}
+.g-bar{position:absolute;top:8px;height:33px;display:flex;flex-direction:column;justify-content:center;overflow:hidden;
+  padding:0 7px;border-radius:6px;background:var(--c);color:#172720;white-space:nowrap}
+.g-bar b{font-size:11px}
+.g-bar span{font:10px var(--mono)}
+.g-bar.unspec{position:static;margin:8px;background:#f2f4f2;color:var(--mut);font-size:11px}
+.g-stage{position:absolute;z-index:1;display:grid;place-items:center;width:23px;height:23px;transform:translateX(-50%);
+  border:1px solid #17272042;border-radius:6px;background:var(--c);color:#172720;font:750 12px var(--mono);cursor:help}
+.g-stage:focus-visible,.g-stage:hover{z-index:3}
+#stageHint{min-height:22px;margin:6px 0;color:var(--mut);font-size:12px}
 
-/* ---- диалог импорта / тост ---- */
-dialog.dlg{border:0;border-radius:24px;padding:26px;width:min(720px,92vw);background:#e9edf5;
-  box-shadow:14px 14px 34px rgba(140,152,180,.6), -10px -10px 26px #fff}
-dialog.dlg::backdrop{background:rgba(70,80,105,.35);backdrop-filter:blur(2px)}
-.dlg h3{font:800 17px "Unbounded";margin-bottom:8px}
-.dlg p{color:var(--mut);font-size:12.5px;font-weight:600;margin-bottom:14px}
-.dlg textarea{width:100%;resize:vertical;border:0;border-radius:14px;padding:12px;
-  font:500 12px "JetBrains Mono";color:var(--ink);background:#e2e7f0;
-  box-shadow:inset 5px 5px 12px rgba(178,187,207,.8), inset -6px -6px 12px #fff}
-.dlg textarea:focus{outline:none;box-shadow:inset 5px 5px 12px rgba(178,187,207,.9), 0 0 0 2px rgba(121,168,60,.35)}
-.dlg .modes{display:flex;gap:16px;margin:14px 0 18px;font-weight:700;font-size:13px;color:var(--ink2)}
-.dlg .modes label{display:flex;gap:7px;align-items:center;cursor:pointer}
-.dlg .modes input{accent-color:var(--lime-d)}
-.dlg-btns{display:flex;justify-content:flex-end;gap:10px}
-#toast{position:fixed;right:20px;bottom:calc(100px + env(safe-area-inset-bottom));z-index:80;
-  padding:12px 20px;border-radius:14px;font-weight:700;font-size:13.5px;opacity:0;transform:translateY(14px);
-  background:#3d465c;color:#fff;box-shadow:8px 8px 20px rgba(50,60,85,.4);transition:all .3s;pointer-events:none}
-#toast.show{opacity:1;transform:translateY(0)}
+.dlg{width:min(720px,94vw);padding:18px;border:1px solid var(--line);border-radius:12px;background:var(--panel);color:var(--ink)}
+.dlg::backdrop{background:#15261d70}
+.dlg h3{margin:0}
+.dlg p{font-size:13px;color:var(--mut)}
+.dlg textarea{width:100%;resize:vertical;padding:10px;border:1px solid var(--line);border-radius:7px;font:12px var(--mono)}
+.dlg .modes,.dlg-btns{display:flex;gap:9px 14px;flex-wrap:wrap;margin-top:12px;font-size:13px}
+.dlg .modes input{accent-color:var(--green)}
+.dlg-btns{justify-content:flex-end}
+#toast{position:fixed;right:12px;bottom:calc(80px + env(safe-area-inset-bottom));z-index:80;
+  max-width:calc(100% - 24px);padding:9px 12px;border-radius:8px;background:var(--ink);color:#fff;
+  font-size:13px;opacity:0;pointer-events:none}
+#toast.show{opacity:1}
 
 @media (max-width:680px){
-  body{padding:14px 10px 128px}
-  :root{--rl:170px}
-  header.top{align-items:stretch}
-  .clock{flex:1;text-align:left;min-width:0}
-  .tab{width:86px;height:58px}
-  .card{padding:16px 12px 10px}
-  .hdate{font-size:10.5px}
-  .tscroll{max-height:calc(100vh - 320px)}
-  #btnAdd{width:50px;height:50px}
-  .c-title{width:170px}
-  .c-profile{width:130px;left:216px}
-  .grid thead .c-profile{left:216px}
-  table.grid{min-width:1560px}
-}
-@media (prefers-reduced-motion:reduce){
-  *,*::before,*::after{animation-duration:.01ms!important;transition-duration:.01ms!important}
+  :root{--rl:132px}
+  body{padding:16px 10px 96px}
+  .top{align-items:flex-start;gap:8px}
+  .brand{gap:7px}
+  .brand-badge{width:32px;height:32px;font-size:17px}
+  .clock b{font-size:13px}
+  .clock small{font-size:10px}
+  .statline{margin-bottom:15px;gap:2px 12px}
+  .card{padding:10px 8px}
+  .card-h{gap:5px}
+  .card-h h2{font-size:15px}
+  .card td,.card th{padding:6px 3px}
+  .hdate{font-size:10px}
+  .hn{display:none}
+  .tab{font-size:11px}
+  .stage-controls .toolbar{gap:5px}
+  .stage-controls .chip{padding-inline:9px}
+  .grid .c-num,.grid .c-title{position:static}
+  .grid thead .c-num,.grid thead .c-title{position:sticky;left:auto}
+  .g-label,.g-hlab{padding:6px}
 }
 </style>
 </head>
 <body>
-<div class="bg-deco"></div>
 <div class="wrap">
 
   <header class="top">
     <div class="brand">
       <div class="brand-badge">◈</div>
       <div>
-        <h1>ОЛИМП<em>·</em>ТРЕКЕР</h1>
-        <p>реестр олимпиад · дедлайны регистраций · МСК</p>
+        <h1>Олимп<em>·</em>Трекер</h1>
+
       </div>
     </div>
-    <div class="clock neu-in">
-      <b class="mono" id="clockTime">--<i>:</i>--<i>:</i>--</b>
-      <small id="clockDate">…</small>
-      <span class="tz">МСК</span>
+    <div class="clock">
+      <b id="clockTime">--<i>:</i>--<i>:</i>--</b><span class="tz">МСК</span>
+      <small id="clockDate"></small>
     </div>
   </header>
 
-  <div class="statline neu" id="statline"></div>
+  <div class="statline" id="statline"></div>
 
   <?php if (!$dbOk): ?>
-    <div class="dbbanner">⚠ Нет соединения с базой: <?= htmlspecialchars($dbErr) ?>. Проверьте <b>config.php</b> и импортируйте <b>schema.sql</b>.</div>
+    <div class="dbbanner">⚠ Ошибка базы данных: <?= htmlspecialchars($dbErr) ?>. Для прежней базы примените <b>migrations/001_rounds.sql</b>.</div>
   <?php endif; ?>
 
   <main>
@@ -354,17 +252,39 @@ dialog.dlg::backdrop{background:rgba(70,80,105,.35);backdrop-filter:blur(2px)}
         <div class="legend" id="legend"></div>
         <span style="flex:1"></span>
         <div class="seg" id="schedSort">
-          <button data-k="reg_end" class="on">по закрытию ↑</button>
-          <button data-k="reg_start">по старту ↑</button>
+          <button data-k="reg_end" class="on" aria-pressed="true">по закрытию ↑</button>
+          <button data-k="reg_start" aria-pressed="false">по старту ↑</button>
         </div>
       </div>
-      <div class="gantt neu" id="gantt"></div>
+      <div class="gantt panel" id="gantt"></div>
+    </section>
+
+    <section class="view" id="view-stages" aria-label="Этапы">
+      <div class="stage-controls">
+        <div class="seg" id="stageMode" role="group" aria-label="Вид этапов">
+          <button class="on" data-mode="summary" aria-pressed="true">Сводка</button>
+          <button data-mode="timeline" aria-pressed="false">Расписание</button>
+        </div>
+        <div class="toolbar" id="stageFilters" role="group" aria-label="Фильтр по турам">
+          <button class="chip is-pressed" data-round="next" aria-pressed="true">Ближайший</button>
+          <?php for ($round = 1; $round <= 4; $round++): ?>
+            <button class="chip" data-round="<?= $round ?>" aria-pressed="false"><?= $round ?> тур</button>
+          <?php endfor; ?>
+          <button class="chip" data-round="all" aria-pressed="false" hidden>Все</button>
+        </div>
+      </div>
+      <div class="home-wrap" id="stageSummary"></div>
+      <div id="stageSchedule" hidden>
+        <div class="sched-head legend" id="stageLegend"></div>
+        <p id="stageHint" aria-live="polite">Нажмите на отметку тура, чтобы увидеть дату и время.</p>
+        <div class="gantt panel" id="stageGantt"></div>
+      </div>
     </section>
 
     <!-- СПИСОК -->
     <section class="view" id="view-list">
       <div class="toolbar" id="chips"></div>
-      <div class="tscroll neu">
+      <div class="tscroll panel">
         <table class="grid">
           <thead>
             <tr>
@@ -373,11 +293,12 @@ dialog.dlg::backdrop{background:rgba(70,80,105,.35);backdrop-filter:blur(2px)}
               <th class="c-profile">Профиль</th>
               <th class="c-date sortable" data-sort="reg_start">Начало регистрации <span class="arr"></span></th>
               <th class="c-date sortable" data-sort="reg_end">Окончание регистрации <span class="arr"></span></th>
-              <th class="c-date sortable" data-sort="stage1_date">Дата первого этапа <span class="arr"></span></th>
-              <th class="c-fmt">Формат первого этапа</th>
-              <th class="c-date sortable" data-sort="final_date">Дата финального этапа <span class="arr"></span></th>
-              <th class="c-fmt">Формат заключительного этапа</th>
               <th>Этапов</th>
+              <?php for ($round = 1; $round <= 4; $round++): ?>
+                <th class="c-date sortable" data-sort="stage<?= $round ?>_date">Дата <?= $round ?> тура <span class="arr"></span></th>
+              <?php endfor; ?>
+              <th class="c-fmt">Формат 1 тура</th>
+              <th class="c-fmt">Формат финала</th>
               <th>Уровень</th>
             </tr>
           </thead>
@@ -385,26 +306,30 @@ dialog.dlg::backdrop{background:rgba(70,80,105,.35);backdrop-filter:blur(2px)}
         </table>
       </div>
       <div class="list-foot">
-        <button class="nbtn acc" id="btnAdd" title="Добавить строку">+</button>
-        <button class="nbtn" id="btnImport">⧉ Вставить Markdown</button>
-        <button class="nbtn" id="btnExport">⤓ Скопировать Markdown</button>
-        <span style="color:var(--mut);font-size:12px;font-weight:600">пустая дата = «Уточняется на сайте» · пустое время = 23:59</span>
+        <button class="nbtn acc" id="btnAdd" aria-label="Добавить строку">+</button>
+        <button class="nbtn" id="btnImport">Вставить Markdown</button>
+        <button class="nbtn" id="btnExport">Скопировать Markdown</button>
+        <span style="color:var(--mut);font-size:12px;font-weight:600">Время — МСК. Без времени используется 23:59. При уменьшении числа этапов даты и отметки лишних туров удаляются.</span>
       </div>
     </section>
   </main>
 </div>
 
 <!-- нижняя панель -->
-<nav class="tabbar neu" aria-label="Основная навигация">
-  <button class="tab is-pressed" data-view="home" style="--acc:#cf6f63" aria-label="Домой">
+<nav class="tabbar panel" aria-label="Основная навигация">
+  <button class="tab is-pressed" data-view="home" aria-current="page" aria-label="Домой">
     <svg viewBox="0 0 24 24"><path d="M3 10.5 12 3l9 7.5M5 9.5V21h5v-6h4v6h5V9.5"/></svg>
     <span>Домой</span>
   </button>
-  <button class="tab" data-view="sched" style="--acc:#5a8fbc" aria-label="Расписание">
+  <button class="tab" data-view="sched" aria-label="Расписание">
     <svg viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="16" rx="2.5"/><path d="M8 3v4M16 3v4M3 10.5h18M8 15h3"/></svg>
     <span>Расписание</span>
   </button>
-  <button class="tab" data-view="list" style="--acc:#79a83c" aria-label="Список">
+  <button class="tab" data-view="stages" aria-label="Этапы">
+    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 19h16M6 15V9m6 6V5m6 10v-3"/><circle cx="6" cy="7" r="2"/><circle cx="12" cy="3" r="2"/><circle cx="18" cy="10" r="2"/></svg>
+    <span>Этапы</span>
+  </button>
+  <button class="tab" data-view="list" aria-label="Список">
     <svg viewBox="0 0 24 24"><path d="M8 6h13M8 12h13M8 18h13"/><circle cx="4" cy="6" r="1.3" fill="currentColor" stroke="none"/><circle cx="4" cy="12" r="1.3" fill="currentColor" stroke="none"/><circle cx="4" cy="18" r="1.3" fill="currentColor" stroke="none"/></svg>
     <span>Список</span>
   </button>
@@ -413,10 +338,10 @@ dialog.dlg::backdrop{background:rgba(70,80,105,.35);backdrop-filter:blur(2px)}
 <!-- диалог импорта -->
 <dialog class="dlg" id="dlg">
   <h3>Импорт таблицы из Markdown</h3>
-  <p>11 столбцов: № · Олимпиада · Профиль · Начало регистрации · Окончание регистрации · Дата первого этапа · Формат 1-го этапа · Дата финала · Формат финала · Кол-во этапов · Уровень. Старый формат из 10 столбцов (профиль в скобках названия) тоже понимается. Даты: «21 сентября 2026 (14:00 МСК)», «21.09.2026», «2026-09-21», «Уточняется на сайте».</p>
-  <textarea id="mdIn" rows="8" placeholder="| № | Олимпиада | Профиль | Начало регистрации | Окончание регистрации | Дата первого этапа | Формат первого этапа | Дата финального этапа | Формат заключительного этапа | Кол-во этапов | Уровень |
-|---|---|---|---|---|---|---|---|---|---|---|
-| 6 | Высшая проба | Математика | 20 августа 2026 | 21 сентября 2026 (14:00 МСК) | 25 сентября 2026 | Заочный | 5 февраля 2027 | Очный | 2 | I |"></textarea>
+  <p>Укажите число этапов от 1 до 4. Даты туров сверх этого числа оставьте пустыми. Для даты используйте «2026-12-05 14:00» (МСК) или «2026-12-05». Старые таблицы из 10 и 11 столбцов тоже поддерживаются.</p>
+  <textarea id="mdIn" rows="8" aria-label="Таблица Markdown" placeholder="| № | Олимпиада | Профиль | Начало регистрации | Окончание регистрации | Дата 1 тура | Дата 2 тура | Дата 3 тура | Дата 4 тура | Формат 1 тура | Формат финала | Кол-во этапов | Уровень |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| 1 | Высшая проба | Математика | 2026-11-25 | 2026-12-01 | 2026-12-05 14:00 | 2027-02-05 | | | Заочный | Очный | 2 | I |"></textarea>
   <div class="modes">
     <label><input type="radio" name="mdMode" value="append" checked> Дописать к списку</label>
     <label><input type="radio" name="mdMode" value="replace"> Заменить весь список</label>
@@ -427,26 +352,31 @@ dialog.dlg::backdrop{background:rgba(70,80,105,.35);backdrop-filter:blur(2px)}
   </div>
 </dialog>
 
-<div id="toast"></div>
+<div id="toast" role="status"></div>
 <datalist id="fmtList">
   <option value="Очно"></option><option value="Дистанционно"></option><option value="Очно-дистанционно"></option>
 </datalist>
 
 <script>
 /* ================= ДАННЫЕ ================= */
-let DATA = <?= json_encode($rows, JSON_UNESCAPED_UNICODE) ?>;
+let DATA = <?= json_encode($rows, JSON_UNESCAPED_UNICODE | JSON_HEX_TAG | JSON_INVALID_UTF8_SUBSTITUTE) ?>;
 const DB_OK = <?= $dbOk ? 'true' : 'false' ?>;
 
 const MONTHS = ['января','февраля','марта','апреля','мая','июня','июля','августа','сентября','октября','ноября','декабря'];
 const MONTHS_S = ['янв','фев','мар','апр','мая','июн','июл','авг','сен','окт','ноя','дек'];
 const SUBJ = {
-  'Математика':  {c:'#b7e06f', d:'#79a83c'},
-  'Физика':      {c:'#9ec9ea', d:'#5a8fbc'},
-  'Информатика': {c:'#93ddcd', d:'#47a592'},
-  'Русский язык':{c:'#f2a9a0', d:'#c96b5e'},
-  'Прочее':      {c:'#cfd5e0', d:'#8a91a4'}
+  'Математика':  {c:'#b7e06f', d:'#466a22'},
+  'Физика':      {c:'#9ec9ea', d:'#315d84'},
+  'Информатика': {c:'#93ddcd', d:'#24695c'},
+  'Русский язык':{c:'#f2a9a0', d:'#94443b'},
+  'Прочее':      {c:'#cfd5e0', d:'#566575'}
 };
-const state = { filter:null, sort:{key:'reg_start',dir:'asc'}, schedKey:'reg_end' };
+const state = {
+  filter:null, sort:{key:'reg_start',dir:'asc'}, schedKey:'reg_end', stageMode:'summary', stageFilter:'next'
+};
+const roundNumbers = [1, 2, 3, 4];
+const stageField = round => `stage${round}_date`;
+const dateFields = ['reg_start', 'reg_end', ...roundNumbers.map(stageField), 'final_date'];
 
 /* ================= УТИЛИТЫ ================= */
 const $  = s => document.querySelector(s);
@@ -507,17 +437,22 @@ async function api(action, data={}){
   if(!j.ok) throw new Error(j.error || 'ошибка сервера');
   return j;
 }
-function normRow(r){ ['reg_start','reg_end','stage1_date','final_date'].forEach(f=>{ if(r[f]) r[f]=r[f].replace(' ','T'); }); return r; }
+function normRow(r){ dateFields.forEach(f=>{ if(r[f]) r[f]=r[f].replace(' ','T'); }); return r; }
 function patchRow(row){ normRow(row); const i = DATA.findIndex(x=>x.id==row.id); if(i>-1) DATA[i]=row; }
 
 /* ================= НАВИГАЦИЯ ================= */
 $$('.tab').forEach(btn=>btn.addEventListener('click', ()=>{
-  $$('.tab').forEach(b=>b.classList.toggle('is-pressed', b===btn));
+  $$('.tab').forEach(b => {
+    b.classList.toggle('is-pressed', b === btn);
+    if (b === btn) b.setAttribute('aria-current', 'page');
+    else b.removeAttribute('aria-current');
+  });
   const v = btn.dataset.view;
   $$('.view').forEach(s=>s.classList.toggle('active', s.id==='view-'+v));
   if(v==='home') renderHome();
   if(v==='sched') renderSchedule();
   if(v==='list') renderList();
+  if(v==='stages') renderStages();
 }));
 
 /* ================= ЧАСЫ И СТАТИСТИКА ================= */
@@ -532,9 +467,9 @@ function renderStats(){
   const withEnd = DATA.filter(r=>r.reg_end && r.reg_end > now).sort((a,b)=>a.reg_end<b.reg_end?-1:1);
   const nxt = withEnd[0];
   $('#statline').innerHTML =
-    `<span><span class="dot"></span>в списке: <b>${DATA.length}</b></span>` +
-    `<span>с регистрацией: <b>${DATA.filter(r=>+r.registered).length}</b></span>` +
-    (nxt ? `<span>ближайший дедлайн: <b>${esc(splitProfile(nxt.name)[0])}</b> — ${fmtDate(nxt.reg_end)}</span>`
+    `<span>Олимпиад: <b>${DATA.length}</b></span>` +
+    `<span>Регистрация отмечена: <b>${DATA.filter(r=>+r.registered).length}</b></span>` +
+    (nxt ? `<span>Ближайший дедлайн: <b>${esc(splitProfile(nxt.name)[0])}</b> — ${fmtDate(nxt.reg_end)}</span>`
          : `<span>активных дедлайнов нет</span>`);
 }
 setInterval(tickClock, 1000);
@@ -565,17 +500,22 @@ function homeBuckets(){
   const soon = DATA.filter(r => r.reg_end
       && ts(r.reg_end) > nowTs && ts(r.reg_end) <= in7Ts && !uIds.has(r.id)).sort(byEnd);
 
-  // диагностика (можно потом удалить): что закрылось за сутки и почему не в «Пропустил»
-  console.table(recent.map(r => ({
-    id: r.id, name: r.name, reg_end: r.reg_end,
-    registered: r.registered, 'попадёт в серый': !+r.registered
-  })));
-
   return {urgent, missed, soon, recent};
 }
-function ckBox(r){
-  return `<label class="ck" title="Отметить регистрацию"><input type="checkbox" data-id="${r.id}" ${+r.registered?'checked':''}><span>✓</span></label>`;
+function ckBox(row, round = null) {
+  const checked = round ? row.stage_attendance & (1 << (round - 1)) : Number(row.registered);
+  const label = round ? `Участие · ${round} тур · ${row.name}` : `Регистрация · ${row.name}`;
+  return `<label class="ck"><input type="checkbox" aria-label="${esc(label)}" data-id="${row.id}"
+    ${round ? `data-round="${round}"` : ''} ${checked ? 'checked' : ''}></label>`;
 }
+
+function cardFrame(tone, tag, title, count, body) {
+  return `<article class="card tone-${tone}">
+    <header class="card-h"><h2>${title}</h2>${tag ? `<span class="tag">${tag}</span>` : ''}
+      <span class="count">${count}</span></header>
+    ${body}</article>`;
+}
+
 function hRow(r, i, dateCells, late){
   const [base, prof] = splitProfile(r.name);
   const subj = subjectOf(r.name), col = SUBJ[subj].d;
@@ -590,11 +530,11 @@ function cardHTML(tone, tag, title, rows, mode, recent){
   let body = '';
   if(!rows.length){
     let e;
-    if(mode==='urgent') e = '<b>🌿</b>Сегодня и завтра дедлайнов нет — можно выдохнуть.';
+    if(mode==='urgent') e = 'Сегодня и завтра дедлайнов нет.';
     else if(mode==='missed') e = (recent && recent.length)
-        ? `<b>🤔</b>За последние сутки закрывалось регистраций: ${recent.length}, но все они отмечены чек-боксом как выполненные — поэтому блок пуст. Снимите отметку, и строка появится здесь.`
-        : '<b>✅</b>Пропусков нет: за последние сутки регистраций не закрывалось.';
-    else e = '<b>🔭</b>В ближайшие 7 дней регистраций не закрывается.';
+        ? `Все регистрации, закрывшиеся за последние сутки (${recent.length}), отмечены.`
+        : 'За последние сутки регистрации не закрывались.';
+    else e = 'Других дедлайнов в ближайшие 7 дней нет.';
     body = `<div class="empty">${e}</div>`;
   } else {
     const head = mode==='soon'
@@ -605,15 +545,13 @@ function cardHTML(tone, tag, title, rows, mode, recent){
         : hRow(r,i,`<td class="hdate">${fmtDate(r.reg_end)}</td>`, mode==='missed')).join('');
     body = `<table><thead>${head}</thead><tbody>${tr}</tbody></table>`;
   }
-  return `<article class="card tone-${tone}">
-    <header class="card-h"><span class="tag">${tag}</span><h2>${title}</h2><span class="count">${rows.length}</span></header>
-    ${body}</article>`;
+  return cardFrame(tone, tag, title, rows.length, body);
 }
 function renderHome(){
   const {urgent, missed, soon, recent} = homeBuckets();
-  const u = cardHTML('urgent','дедлайн ≤ завтра','ОБЯЗАТЕЛЬНО СЕГОДНЯ', urgent, 'urgent');
-  const m = cardHTML('missed','регистрация упущена','ПРОПУСТИЛ', missed, 'missed', recent);
-  const s = cardHTML('soon','горизонт 7 дней','БЛИЖАЙШЕЕ', soon, 'soon');
+  const u = cardHTML('urgent','дедлайн ≤ завтра','Срочные регистрации', urgent, 'urgent');
+  const m = cardHTML('missed','регистрация упущена','Пропустил', missed, 'missed', recent);
+  const s = cardHTML('soon','горизонт 7 дней','Ближайшие регистрации', soon, 'soon');
   // «Пропустил» пустой → опускается в самый низ
   $('#homeWrap').innerHTML = missed.length ? u + m + s : u + s + m;
 }
@@ -625,7 +563,12 @@ $('#homeWrap').addEventListener('change', async e=>{
     setTimeout(renderHome, 350); renderStats();
   }catch(err){ toast(err.message); cb.checked = !cb.checked; }
 });
-setInterval(()=>{ if($('#view-home').classList.contains('active')) renderHome(); renderStats(); }, 60000);
+setInterval(() => {
+  if ($('#view-home').classList.contains('active')) renderHome();
+  if ($('#view-stages').classList.contains('active') && state.stageMode === 'summary'
+      && !$('#stageSummary').contains(document.activeElement)) renderStageSummary();
+  renderStats();
+}, 60000);
 
 /* ================= СПИСОК ================= */
 const FILTERS = [null,'Русский язык','Математика','Физика','Информатика'];
@@ -654,36 +597,41 @@ function visibleRows(){
   });
   return rows;
 }
-function dateCell(r, f){
+function dateCell(r, f, round = null) {
+  if (round && round > Number(r.stages_count)) {
+    return '<td class="c-date round-inactive" title="Тур не проводится">—</td>';
+  }
   const v = r[f] || '';
+  const label = round ? `${round} тур` : (f === 'reg_start' ? 'Начало регистрации' : 'Окончание регистрации');
   return `<td class="c-date"><div class="datepair">
-      <input type="date" class="ci di" data-f="${f}" value="${dOf(v)??''}">
-      <input type="time" class="ci ti" data-f="${f}__t" value="${tOf(v)}" title="Пусто = 23:59">
-    </div>${!v?'<span class="hint-unspec">уточняется на сайте</span>':''}</td>`;
+      <input type="date" class="ci di" data-f="${f}" aria-label="Дата: ${label}" value="${dOf(v) ?? ''}">
+      <input type="time" class="ci ti" data-f="${f}__t" aria-label="Время: ${label}" value="${tOf(v)}" title="Пусто = 23:59">
+    </div><span class="hint-unspec" ${v ? 'hidden' : ''}>Уточняется</span></td>`;
 }
-function rowTR(r, n){
-  const subj = subjectOf(r.name);
+
+function rowTR(r, n) {
   const [title, prof] = splitProfile(r.name);
-  return `<tr class="sub-${subj}" data-id="${r.id}">
-    <td class="c-num rn">${n}</td>
-    <td class="c-title"><input class="ci" data-f="title" value="${esc(title)}" placeholder="Олимпиада"></td>
+  const options = Number(r.stages_count) > 4 ? [...roundNumbers, Number(r.stages_count)] : roundNumbers;
+  return `<tr data-id="${r.id}">
+    <td class="c-num">${n}</td>
+    <td class="c-title"><input class="ci" data-f="title" aria-label="Олимпиада" value="${esc(title)}" placeholder="Олимпиада"></td>
     <td class="c-profile"><div class="cell-name">
-      <input class="ci" data-f="profile" value="${esc(prof)}" placeholder="Профиль">
-      <button class="del" title="Удалить строку">✕</button></div></td>
-    ${dateCell(r,'reg_start')}${dateCell(r,'reg_end')}${dateCell(r,'stage1_date')}
-    <td class="c-fmt"><input class="ci" data-f="stage1_format" value="${esc(r.stage1_format)}" list="fmtList" placeholder="Формат"></td>
-    ${dateCell(r,'final_date')}
-    <td class="c-fmt"><input class="ci" data-f="final_format" value="${esc(r.final_format)}" list="fmtList" placeholder="Формат"></td>
-    <td><select class="ci" data-f="stages_count">${[1,2,3,4].map(x=>`<option ${+r.stages_count===x?'selected':''}>${x}</option>`).join('')}</select></td>
-    <td style="text-align:center"><span class="lvl-badge l${+r.lvl}">У${+r.lvl}</span>
-      <select class="ci" data-f="lvl" style="display:none">${[1,2,3].map(x=>`<option ${+r.lvl===x?'selected':''}>${x}</option>`).join('')}</select></td>
+      <input class="ci" data-f="profile" aria-label="Профиль" value="${esc(prof)}" placeholder="Профиль">
+      <button class="del" aria-label="Удалить строку">✕</button></div></td>
+    ${dateCell(r,'reg_start')}${dateCell(r,'reg_end')}
+    <td><select class="ci" data-f="stages_count" aria-label="Количество этапов">${options.map(x=>`<option ${+r.stages_count===x?'selected':''}>${x}</option>`).join('')}</select></td>
+    ${roundNumbers.map(round => dateCell(r, stageField(round), round)).join('')}
+    <td class="c-fmt"><input class="ci" data-f="stage1_format" aria-label="Формат 1 тура" value="${esc(r.stage1_format)}" list="fmtList" placeholder="Формат"></td>
+    <td class="c-fmt"><input class="ci" data-f="final_format" aria-label="Формат финала" value="${esc(r.final_format)}" list="fmtList" placeholder="Формат"></td>
+    <td style="text-align:center"><button class="lvl-badge l${+r.lvl}">У${+r.lvl}</button>
+      <select class="ci" data-f="lvl" aria-label="Уровень" hidden>${[1,2,3].map(x=>`<option ${+r.lvl===x?'selected':''}>${x}</option>`).join('')}</select></td>
   </tr>`;
 }
 function renderList(){
   const rows = visibleRows();
   $('#listBody').innerHTML = rows.length
     ? rows.map((r,i)=>rowTR(r,i+1)).join('')
-    : `<tr><td colspan="11"><div class="empty"><b>📭</b>Здесь пока пусто. Нажмите «+» внизу или импортируйте Markdown.</div></td></tr>`;
+    : `<tr><td colspan="13"><div class="empty">Добавьте олимпиаду или вставьте таблицу Markdown.</div></td></tr>`;
   $$('.grid thead th.sortable').forEach(th=>{
     const on = th.dataset.sort===state.sort.key;
     th.querySelector('.arr').textContent = on ? (state.sort.dir==='asc'?'▲':'▼') : '';
@@ -699,36 +647,64 @@ $$('.grid thead th.sortable').forEach(th=>th.addEventListener('click', ()=>{
 $('#listBody').addEventListener('click', e=>{
   const bd = e.target.closest('.lvl-badge'); if(!bd) return;
   const sel = bd.parentElement.querySelector('select');
-  sel.style.display='inline-block'; bd.style.display='none'; sel.focus();
+  sel.hidden = false; bd.hidden = true; sel.focus();
 });
+const pendingRowEdits = new Map();
 $('#listBody').addEventListener('change', async e=>{
   const inp = e.target.closest('[data-f]'); if(!inp) return;
   const tr = inp.closest('tr'), id = tr.dataset.id;
+  const original = DATA.find(r => r.id == id);
   let f = inp.dataset.f, value = inp.value;
 
   if(f.endsWith('__t')){
     const base = f.slice(0,-3);
     const d = tr.querySelector(`[data-f="${base}"]`).value;
     f = base; value = d ? `${d}T${inp.value||''}` : '';
+  } else if (dateFields.includes(f)) {
+    const time = tr.querySelector(`[data-f="${f}__t"]`).value;
+    value = value && time ? `${value}T${time}` : value;
   } else if(f==='title' || f==='profile'){
     // два поля склеиваются в одно хранимое имя «Олимпиада (Профиль)»
     const t = tr.querySelector('[data-f="title"]').value.trim();
     const p = tr.querySelector('[data-f="profile"]').value.trim();
     f = 'name'; value = p ? `${t} (${p})` : t;
   }
-  try{
-    const j = await api('update',{id, field:f, value});
-    patchRow(j.row); renderStats();
-    if(['reg_start','reg_end'].includes(f)) renderHome();
-    if(f==='name'){ tr.className='sub-'+subjectOf(j.row.name); renderHome(); renderSchedule(); }
-    if(f==='lvl'){ const b=tr.querySelector('.lvl-badge'); b.textContent='У'+j.row.lvl; b.className='lvl-badge l'+j.row.lvl;
-      b.style.display='inline-block'; e.target.style.display='none'; }
-    if(['reg_start','reg_end','stage1_date','final_date'].includes(f)){
-      const old = inp.closest('td'); const tmp = document.createElement('tr');
-      tmp.innerHTML = dateCell(j.row, f); const fresh = tmp.querySelector('td');
-      old.replaceWith(fresh);
+  const previous = pendingRowEdits.get(id) ?? Promise.resolve();
+  const request = previous.catch(() => {}).then(() => api('update', {id, field:f, value}));
+  pendingRowEdits.set(id, request);
+  if (f === 'stages_count') inp.disabled = true;
+  try {
+    const j = await request;
+    patchRow(j.row);
+    if (f === 'stages_count') {
+      const cells = document.createElement('tr');
+      cells.innerHTML = roundNumbers.map(round => dateCell(j.row, stageField(round), round)).join('');
+      Array.from(cells.cells).forEach((cell, i) => tr.cells[i + 6].replaceWith(cell));
+      inp.value = j.row.stages_count;
+    } else if (f === 'lvl') {
+      const badge = tr.querySelector('.lvl-badge');
+      badge.textContent = 'У' + j.row.lvl;
+      badge.className = 'lvl-badge l' + j.row.lvl;
+      badge.hidden = false;
+      inp.hidden = true;
+      badge.focus();
+    } else if (dateFields.includes(f)) {
+      const cell = inp.closest('td');
+      cell.querySelector('.hint-unspec').hidden = Boolean(j.row[f]);
+      // Keep focus and any newer edit in the same cell.
+      if (!j.row[f] && !cell.querySelector('.di').value) cell.querySelector('.ti').value = '';
     }
-  }catch(err){ toast(err.message); }
+    renderStats();
+  } catch (err) {
+    toast(err.message);
+    if (pendingRowEdits.get(id) === request && original && tr.isConnected) {
+      const current = DATA.find(r => r.id == id);
+      tr.outerHTML = rowTR(current, tr.cells[0].textContent);
+    }
+  } finally {
+    if (pendingRowEdits.get(id) === request) pendingRowEdits.delete(id);
+    inp.disabled = false;
+  }
 });
 // удаление: первый клик — «подтверждение», второй — удаление
 $('#listBody').addEventListener('click', async e=>{
@@ -743,8 +719,7 @@ $('#listBody').addEventListener('click', async e=>{
   try{
     await api('delete',{id: tr.dataset.id});
     DATA = DATA.filter(r=>r.id!=tr.dataset.id);
-    tr.style.opacity=0; tr.style.transition='opacity .25s';
-    setTimeout(()=>{ renderList(); renderStats(); renderHome(); }, 240);
+    renderList(); renderStats();
     toast('Строка удалена');
   }catch(err){ toast(err.message); }
 });
@@ -781,93 +756,250 @@ $('#btnExport').addEventListener('click', async ()=>{
   }catch(err){ toast('Не удалось скопировать: '+err.message); }
 });
 
+/* ================= ЭТАПЫ ================= */
+const DAY_MS = 86400000;
+const stageTime = date => Date.parse(date + 'Z');
+const stageNow = () => stageTime(mskNowISO());
+
+function roundsFor(row) {
+  return roundNumbers.filter(round => round <= Number(row.stages_count)).map(round => ({
+    row, round, date: row[stageField(round)], attended: Boolean(row.stage_attendance & (1 << (round - 1)))
+  }));
+}
+
+const byStageDate = (a, b) => a.date.localeCompare(b.date) || a.round - b.round;
+function upcomingRound(rounds, now) {
+  return rounds.filter(r => r.date && stageTime(r.date) >= now).sort(byStageDate)[0];
+}
+
+function toggleButton(button, on, className) {
+  button.classList.toggle(className, on);
+  button.setAttribute('aria-pressed', on);
+}
+
+$('#stageMode').addEventListener('click', e => {
+  const mode = e.target.closest('button')?.dataset.mode;
+  if (!mode || mode === state.stageMode) return;
+  state.stageMode = mode;
+  if (mode === 'summary' && state.stageFilter === 'all') state.stageFilter = 'next';
+  renderStages();
+});
+
+$('#stageFilters').addEventListener('click', e => {
+  const filter = e.target.closest('button')?.dataset.round;
+  if (!filter || filter === state.stageFilter) return;
+  state.stageFilter = filter;
+  renderStages();
+});
+
+function renderStages() {
+  const timeline = state.stageMode === 'timeline';
+  $$('#stageMode button').forEach(b => toggleButton(b, b.dataset.mode === state.stageMode, 'on'));
+  $$('#stageFilters button').forEach(b => {
+    b.hidden = b.dataset.round === 'all' && !timeline;
+    toggleButton(b, b.dataset.round === state.stageFilter, 'is-pressed');
+  });
+  $('#stageSummary').hidden = timeline;
+  $('#stageSchedule').hidden = !timeline;
+  if (timeline) renderStageSchedule();
+  else renderStageSummary();
+}
+
+function stageCard(tone, title, entries, empty) {
+  const rows = entries.map(({row, round, date}, i) => {
+    const [base, profile] = splitProfile(row.name);
+    const check = round ? ckBox(row, round) : '';
+    return `<tr><td class="hn">${i + 1}</td>
+      <td class="hname"><b>${esc(base)}</b> ${profile ? `<em style="--subj:${SUBJ[subjectOf(row.name)].d}">(${esc(profile)})</em>` : ''}
+        <small>${round ? `${round} тур` : `Всего этапов: ${row.stages_count}`}</small></td>
+      <td class="hdate">${round ? fmtDate(date) : 'Тур не проводится'}</td><td>${check}</td></tr>`;
+  }).join('');
+  const body = rows ? `<table aria-label="${title}"><tbody>${rows}</tbody></table>` : `<div class="empty">${empty}</div>`;
+  return cardFrame(tone, '', title, entries.length, body);
+}
+
+function renderStageSummary() {
+  const now = stageNow(), nearest = state.stageFilter === 'next';
+  const urgent = [], missed = [], soon = [], later = [], attended = [], undated = [];
+  for (const row of DATA) {
+    const rounds = roundsFor(row);
+    if (nearest) {
+      const next = upcomingRound(rounds, now);
+      if (next) place(next);
+      rounds.filter(r => r.date && stageTime(r.date) < now && stageTime(r.date) >= now - DAY_MS).forEach(place);
+      if (!next && rounds.some(r => !r.date)) {
+        undated.push(rounds.find(r => !r.date));
+      }
+    } else {
+      const round = rounds.find(r => r.round === Number(state.stageFilter));
+      if (round?.date) place(round);
+      else undated.push(round ?? {row});
+    }
+  }
+
+  function place(round) {
+    const delta = stageTime(round.date) - now;
+    if (delta < 0) (round.attended ? attended : missed).push(round);
+    else if (delta <= DAY_MS) urgent.push(round);
+    else if (delta <= 7 * DAY_MS) soon.push(round);
+    else later.push(round);
+  }
+
+  [urgent, soon, later].forEach(rows => rows.sort(byStageDate));
+  [missed, attended].forEach(rows => rows.sort((a, b) => byStageDate(b, a)));
+  const urgentCard = stageCard('urgent', 'В ближайшие 24 часа', urgent, 'Туров в ближайшие 24 часа нет.');
+  const missedCard = stageCard('missed', 'Пропустил', missed, 'Пропущенных туров нет.');
+  const soonCard = stageCard('soon', 'В ближайшие 7 дней', soon, 'Других туров в ближайшие 7 дней нет.');
+  $('#stageSummary').innerHTML = urgentCard + (missed.length ? missedCard + soonCard : soonCard + missedCard)
+    + (later.length ? stageCard('plain', 'Позже', later) : '')
+    + (attended.length ? stageCard('plain', 'Участие отмечено', attended) : '')
+    + (undated.length ? stageCard('plain', 'Без даты', undated) : '');
+}
+
+$('#stageSummary').addEventListener('change', async e => {
+  const cb = e.target.closest('input[data-round]');
+  if (!cb) return;
+  cb.disabled = true;
+  try {
+    const j = await api('participation', {id: cb.dataset.id, round: cb.dataset.round, attended: Number(cb.checked)});
+    const row = DATA.find(r => r.id == cb.dataset.id);
+    if (row) row.stage_attendance = j.stage_attendance;
+    renderStageSummary();
+    $('#stageSummary').querySelector(`input[data-id="${cb.dataset.id}"][data-round="${cb.dataset.round}"]`)?.focus({preventScroll: true});
+  } catch (err) {
+    cb.checked = !cb.checked;
+    toast(err.message);
+  } finally {
+    cb.disabled = false;
+  }
+});
+
+const stageHint = 'Нажмите на отметку тура, чтобы увидеть дату и время.';
+$('#stageGantt').addEventListener('click', e => {
+  const marker = e.target.closest('[data-stage-detail]');
+  if (marker) $('#stageHint').textContent = marker.dataset.stageDetail;
+});
+
+function renderStageSchedule() {
+  const filter = state.stageFilter, now = stageNow();
+  const entries = DATA.map(row => {
+    const rounds = roundsFor(row);
+    const next = filter === 'next' ? upcomingRound(rounds, now) : null;
+    const events = filter === 'next' ? (next ? [next] : [])
+      : rounds.filter(r => r.date && (filter === 'all' || r.round === Number(filter))).sort(byStageDate);
+    return {row, events};
+  }).filter(entry => entry.events.length).sort((a, b) => byStageDate(a.events[0], b.events[0]));
+  renderLegend($('#stageLegend'), entries.map(entry => entry.row));
+  $('#stageHint').textContent = stageHint;
+  $('#stageHint').hidden = !entries.length;
+
+  const dates = entries.flatMap(entry => entry.events.map(event => dOf(event.date)));
+  renderTimeline($('#stageGantt'), dates, ({min, ppd}) => entries.map(({row, events}) => {
+    const lanes = [];
+    const markers = events.map(({round, date}) => {
+      const left = (dDays(min, dOf(date)) + 0.5) * ppd;
+      // Keep same-day tours and adjacent markers readable at wider date ranges.
+      const free = lanes.findIndex(last => left - last >= 25);
+      const lane = free === -1 ? lanes.length : free;
+      lanes[lane] = left;
+      const detail = esc(`${row.name} · ${round} тур · ${fmtDate(date)}`);
+      return `<button class="g-stage" style="left:${left}px;top:${9 + lane * 27}px"
+        data-stage-detail="${detail}" aria-label="${detail}" title="${detail}">${round}</button>`;
+    }).join('');
+    return timelineRow(row, markers, '', Math.max(49, lanes.length * 27 + 17));
+  }).join(''), 'Для выбранного тура нет дат.');
+}
+
 /* ================= РАСПИСАНИЕ ================= */
-$('#schedSort').addEventListener('click', e=>{
-  const b = e.target.closest('button'); if(!b) return;
-  state.schedKey = b.dataset.k;
-  $$('#schedSort button').forEach(x=>x.classList.toggle('on', x===b));
+$('#schedSort').addEventListener('click', e => {
+  const button = e.target.closest('button');
+  if (!button) return;
+  state.schedKey = button.dataset.k;
+  $$('#schedSort button').forEach(x => toggleButton(x, x === button, 'on'));
   renderSchedule();
 });
-function renderLegend(){
-  const cnt = {};
-  DATA.forEach(r=>{ const s=subjectOf(r.name); cnt[s]=(cnt[s]||0)+1; });
-  $('#legend').innerHTML = Object.entries(SUBJ).filter(([s])=>cnt[s])
-    .map(([s,v])=>`<span class="lg" style="--cc:${v.c}"><i></i>${s} <small>${cnt[s]}</small></span>`).join('');
+
+function renderLegend(container, rows) {
+  const counts = {};
+  rows.forEach(row => {
+    const subject = subjectOf(row.name);
+    counts[subject] = (counts[subject] || 0) + 1;
+  });
+  container.innerHTML = Object.entries(SUBJ).filter(([s]) => counts[s])
+    .map(([s, v]) => `<span class="lg" style="--cc:${v.c}"><i></i>${s} <small>${counts[s]}</small></span>`).join('');
 }
-function renderSchedule(){
-  renderLegend();
-  const rows = DATA.slice();
-  const k = state.schedKey;
-  rows.sort((a,b)=>{ const av=a[k],bv=b[k];
-    if(av==null&&bv==null) return a.id-b.id; if(av==null) return 1; if(bv==null) return -1;
-    return av<bv?-1:av>bv?1:0; });
 
-  const dates = [];
-  rows.forEach(r=>['reg_start','reg_end','final_date'].forEach(f=>{ if(r[f]) dates.push(dOf(r[f])); }));
-  if(!dates.length){ $('#gantt').innerHTML = '<div class="empty"><b>🗓</b>Нет данных с датами.</div>'; return; }
-  const min = addDaysISO(dates.reduce((a,b)=>a<b?a:b), -3);
-  const max = addDaysISO(dates.reduce((a,b)=>a>b?a:b), 3);
-  const days = dDays(min, max) + 1;
-  const ppd = days<=31 ? 46 : days<=62 ? 30 : days<=124 ? 18 : 12;
-  const tw = days*ppd;
-  const rl = window.matchMedia('(max-width:680px)').matches ? 170 : 240;
-  const today = mskToday();
+function timelineRow(row, bar, subtitle = '', height = 49) {
+  const subj = SUBJ[subjectOf(row.name)];
+  const [base, profile] = splitProfile(row.name);
+  return `<div class="g-row" style="--c:${subj.c}">
+    <div class="g-label"><span class="dot"></span><span><b>${esc(base)}${profile ? ` <small>(${esc(profile)})</small>` : ''}</b>
+      ${subtitle ? `<small>${subtitle}</small>` : ''}</span></div>
+    <div class="g-track" style="min-height:${height}px">${bar}</div>
+  </div>`;
+}
 
-  let months = [], cur = null;
-  for(let i=0;i<days;i++){
-    const d = addDaysISO(min,i); const [y,m] = d.split('-');
-    const key = y+m;
-    if(!cur || cur.key!==key){ cur = {key, y, m, start:i, len:1}; months.push(cur); } else cur.len++;
+function renderTimeline(container, dates, renderRows, emptyMessage) {
+  if (!dates.length) {
+    container.innerHTML = `<div class="empty">${emptyMessage}</div>`;
+    return;
   }
-  const monthHTML = months.map(s=>{
-    const name = new Intl.DateTimeFormat('ru-RU',{month:'long'}).format(new Date(+s.y, +s.m-1, 1));
-    return `<div class="g-month" style="left:${s.start*ppd}px;width:${s.len*ppd}px">${name} ${s.y}</div>`;
-  }).join('');
-  const tickK = ppd>=40?1:ppd>=24?2:ppd>=16?5:7;
-  let ticks = '';
-  for(let i=0;i<days;i+=tickK){ const d=addDaysISO(min,i); ticks += `<span class="g-tick" style="left:${i*ppd+ppd/2}px">${+d.slice(8,10)}</span>`; }
+  const min = addDaysISO(dates.reduce((a, b) => a < b ? a : b), -3);
+  const max = addDaysISO(dates.reduce((a, b) => a > b ? a : b), 3);
+  const days = dDays(min, max) + 1;
+  const ppd = days <= 31 ? 46 : days <= 62 ? 30 : days <= 124 ? 18 : 12;
+  const tw = days * ppd;
+  const today = mskToday();
+  const todayX = (dDays(min, today) + 0.5) * ppd;
+  const isToday = today >= min && today <= max;
 
-  const rowsHTML = rows.map((r,idx)=>{
-    const subj = subjectOf(r.name), c = SUBJ[subj].c;
-    const [base, prof] = splitProfile(r.name);
-    let bar = '';
-    if(r.reg_start && r.reg_end){
-      const left = dDays(min, dOf(r.reg_start))*ppd;
-      const w = Math.max((dDays(dOf(r.reg_start), dOf(r.reg_end))+1)*ppd - 6, 26);
-      bar = `<div class="g-bar" style="left:${left}px;width:${w}px;--c:${c};animation-delay:${idx*45}ms"
-        title="${esc(r.name)}\nРегистрация: ${fmtDate(r.reg_start)} → ${fmtDate(r.reg_end)}">
-        <b>${esc(base)}</b><span>${fmtShort(r.reg_start)} → ${fmtShort(r.reg_end)}</span></div>`;
-    } else if(r.reg_end){
-      const left = dDays(min, addDaysISO(dOf(r.reg_end),-3))*ppd;
-      const w = Math.max(4*ppd-6, 26);
-      bar = `<div class="g-bar" style="left:${left}px;width:${w}px;--c:${c};animation-delay:${idx*45}ms"
-        title="${esc(r.name)}\nСтарт регистрации уточняется, закрытие: ${fmtDate(r.reg_end)}">
-        <b>${esc(base)}</b><span>до ${fmtShort(r.reg_end)}</span></div>`;
-    } else {
-      bar = `<div class="g-bar unspec">◌ ${esc(base)} — даты уточняются на сайте</div>`;
+  const monthFormat = new Intl.DateTimeFormat('ru-RU', {month:'long', year:'numeric', timeZone:'UTC'});
+  const tickStep = ppd >= 40 ? 1 : ppd >= 24 ? 2 : ppd >= 16 ? 5 : 7;
+  let months = '', ticks = '';
+  for (let i = 0; i < days; i++) {
+    const date = addDaysISO(min, i);
+    if (!i || date.endsWith('-01')) {
+      const name = monthFormat.format(new Date(date));
+      months += `<div class="g-month" style="left:${i * ppd}px">${name}</div>`;
     }
-    const close = r.reg_end ? `закрытие ${fmtShort(r.reg_end)}${tOf(r.reg_end)?' · '+tOf(r.reg_end):''}` : 'закрытие уточняется';
-    return `<div class="g-row" style="--c:${c}">
-      <div class="g-label"><span class="dot"></span><span><b>${esc(base)}${prof?` <small style="color:${SUBJ[subj].d}">(${esc(prof)})</small>`:''}</b><small>${close}</small></span></div>
-      <div class="g-track">${bar}</div></div>`;
-  }).join('');
+    if (i % tickStep === 0) ticks += `<span class="g-tick" style="left:${(i + 0.5) * ppd}px">${Number(date.slice(-2))}</span>`;
+  }
 
-  const todayX = (dDays(min, today))*ppd + ppd/2;
-  const g = $('#gantt');
-  g.innerHTML = `<div class="g-scroll"><div class="g-inner" style="--rl:${rl}px;--tw:${tw}px;--ppd:${ppd}px;--today-x:${todayX}px">
-      <div class="g-headrow"><div class="g-hlab">Олимпиада</div><div class="g-htl">${monthHTML}${ticks}</div></div>
-      ${rowsHTML}</div></div>`;
-  const tLine = g.querySelector('.g-inner');
-  if(today < min || today > max) tLine.style.setProperty('--today-x','-100px');
-  const sc = g.querySelector('.g-scroll');
-  sc.scrollLeft = Math.max(0, todayX - 140);
+  container.innerHTML = `<div class="g-scroll"><div class="g-inner${isToday ? ' is-today' : ''}"
+    style="--tw:${tw}px;--ppd:${ppd}px;--today-x:${todayX}px"><div class="g-headrow">
+    <div class="g-hlab">Олимпиада</div><div class="g-htl">${months}${ticks}</div></div>
+    ${renderRows({min, ppd})}</div></div>`;
+  if (isToday) container.querySelector('.g-scroll').scrollLeft = Math.max(0, todayX - 140);
+}
+
+function renderSchedule() {
+  const key = state.schedKey;
+  const rows = DATA.slice().sort((a, b) => {
+    if (!a[key] || !b[key]) return Number(!a[key]) - Number(!b[key]) || a.id - b.id;
+    return a[key].localeCompare(b[key]);
+  });
+  renderLegend($('#legend'), rows);
+  const dates = rows.flatMap(r => [r.reg_start, r.reg_end, r.final_date].filter(Boolean).map(dOf));
+  renderTimeline($('#gantt'), dates, ({min, ppd}) => rows.map(row => {
+    const {reg_start: start, reg_end: end} = row;
+    const close = end ? `Закрытие: ${fmtShort(end)}` : 'Закрытие уточняется';
+    if (!end) return timelineRow(row, '<div class="g-bar unspec">Даты уточняются на сайте</div>', close);
+    const from = start ? dOf(start) : addDaysISO(dOf(end), -3);
+    const left = dDays(min, from) * ppd;
+    const width = Math.max((dDays(from, dOf(end)) + 1) * ppd - 4, 26);
+    const label = start ? `${fmtShort(start)} → ${fmtShort(end)}` : `до ${fmtShort(end)}`;
+    const detail = start ? `Регистрация: ${fmtDate(start)} → ${fmtDate(end)}` : `Закрытие регистрации: ${fmtDate(end)}`;
+    const bar = `<div class="g-bar" style="left:${left}px;width:${width}px" title="${esc(`${row.name} · ${detail}`)}">
+      <b>${esc(splitProfile(row.name)[0])}</b><span>${label}</span></div>`;
+    return timelineRow(row, bar, close);
+  }).join(''), 'Нет данных с датами.');
 }
 
 /* ================= СТАРТ ================= */
-function renderAll(){ renderChips(); renderList(); renderHome(); renderSchedule(); renderStats(); }
+function renderAll(){ renderChips(); renderList(); renderHome(); renderStats(); }
 tickClock();
 renderAll();
-if(!DB_OK) toast('Нет соединения с базой данных');
+if(!DB_OK) toast('Ошибка базы данных');
 </script>
 </body>
 </html>
