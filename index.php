@@ -4,6 +4,7 @@ require_once __DIR__ . '/config.php';
 $rows = []; $dbOk = true; $dbErr = '';
 try {
     $rows = db()->query('SELECT id, name, reg_start, reg_end, stage1_date, stage2_date, stage3_date, stage4_date,
+            stage1_end, stage2_end, stage3_end, stage4_end,
             stage1_format, stage2_format, stage3_format, stage4_format, final_date, final_format,
             stages_count, lvl, registered, stage_attendance
         FROM olympiads ORDER BY id')->fetchAll();
@@ -11,7 +12,8 @@ try {
     $dbOk = false; $dbErr = $e->getMessage();
 }
 function row_out(array $r): array {
-    foreach (['reg_start','reg_end','stage1_date','stage2_date','stage3_date','stage4_date','final_date'] as $f)
+    foreach (['reg_start','reg_end','stage1_date','stage2_date','stage3_date','stage4_date',
+        'stage1_end','stage2_end','stage3_end','stage4_end','final_date'] as $f)
         if (!empty($r[$f])) $r[$f] = str_replace(' ', 'T', $r[$f]);
     return $r;
 }
@@ -114,6 +116,8 @@ table.grid{width:100%;min-width:1690px;border-spacing:0}
 .datepair .ci{min-width:0;font:12px var(--mono)}
 .datepair .di{width:115px}
 .datepair .ti{width:76px}
+.round-endpoint+.round-endpoint{margin-top:5px}
+.round-endpoint>span{display:block;margin-bottom:2px;color:var(--mut);font-size:11px}
 .hint-unspec{display:block;color:var(--mut);font-size:11px;margin-top:3px}
 .round-inactive{color:var(--mut);font-size:12px}
 select.ci{width:auto}
@@ -188,8 +192,9 @@ select.round-format{display:block;width:100%;max-width:196px;margin-top:6px}
 .g-bar b{font-size:11px}
 .g-bar span{font:10px var(--mono)}
 .g-bar.unspec{position:static;margin:8px;background:#f2f4f2;color:var(--mut);font-size:11px}
-.g-stage{position:absolute;z-index:1;display:grid;place-items:center;width:23px;height:23px;transform:translateX(-50%);
+.g-stage{position:absolute;z-index:1;display:grid;place-items:center;min-width:23px;height:23px;padding:0;
   border:1px solid #17272042;border-radius:6px;background:var(--c);color:#172720;font:750 12px var(--mono);cursor:help}
+.g-stage.is-range{justify-items:start;padding-inline:6px}
 .g-stage:focus-visible,.g-stage:hover{z-index:3}
 .g-stage.is-remote,.lg-remote i{
   background-image:repeating-linear-gradient(-45deg,#17272042 0 2px,transparent 2px 6px)
@@ -293,7 +298,7 @@ select.round-format{display:block;width:100%;max-width:196px;margin-top:6px}
       <div class="home-wrap" id="stageSummary"></div>
       <div id="stageSchedule" hidden>
         <div class="sched-head legend" id="stageLegend"></div>
-        <p id="stageHint" aria-live="polite">Нажмите на отметку тура, чтобы увидеть дату и формат.</p>
+        <p id="stageHint" aria-live="polite">Нажмите на отметку тура, чтобы увидеть даты, время и формат.</p>
         <div class="gantt panel" id="stageGantt"></div>
       </div>
     </section>
@@ -324,7 +329,7 @@ select.round-format{display:block;width:100%;max-width:196px;margin-top:6px}
         <button class="nbtn acc" id="btnAdd" aria-label="Добавить строку">+</button>
         <button class="nbtn" id="btnImport">Вставить Markdown</button>
         <button class="nbtn" id="btnExport">Скопировать Markdown</button>
-        <span style="color:var(--mut);font-size:12px;font-weight:600">Время — МСК. Без времени используется 23:59. При уменьшении числа этапов данные лишних туров удаляются.</span>
+        <span style="color:var(--mut);font-size:12px;font-weight:600">Время — МСК. Если указана одна дата, тур считается однодневным. При уменьшении числа этапов данные лишних туров удаляются.</span>
       </div>
     </section>
   </main>
@@ -353,10 +358,10 @@ select.round-format{display:block;width:100%;max-width:196px;margin-top:6px}
 <!-- диалог импорта -->
 <dialog class="dlg" id="dlg">
   <h3>Импорт таблицы из Markdown</h3>
-  <p>Укажите число этапов от 1 до 4. Даты и форматы отсутствующих туров оставьте пустыми. Для формата используйте «Очно» или «Дистанционно». Для даты используйте «2026-12-05 14:00» (МСК) или «2026-12-05». Таблицы старых форматов тоже поддерживаются.</p>
-  <textarea id="mdIn" rows="8" aria-label="Таблица Markdown" placeholder="| № | Олимпиада | Профиль | Начало регистрации | Окончание регистрации | Дата 1 тура | Дата 2 тура | Дата 3 тура | Дата 4 тура | Формат 1 тура | Формат 2 тура | Формат 3 тура | Формат 4 тура | Кол-во этапов | Уровень |
-|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| 1 | Высшая проба | Математика | 2026-11-25 | 2026-12-01 | 2026-12-05 14:00 | 2027-02-05 | | | Дистанционно | Очно | | | 2 | I |"></textarea>
+  <p>Укажите число этапов от 1 до 4. Для однодневного тура достаточно одной даты. Пример даты со временем по МСК — «2026-12-05 14:00». Таблицы старых форматов тоже поддерживаются.</p>
+  <textarea id="mdIn" rows="8" aria-label="Таблица Markdown" placeholder="| № | Олимпиада | Профиль | Начало регистрации | Окончание регистрации | Начало 1 тура | Начало 2 тура | Начало 3 тура | Начало 4 тура | Конец 1 тура | Конец 2 тура | Конец 3 тура | Конец 4 тура | Формат 1 тура | Формат 2 тура | Формат 3 тура | Формат 4 тура | Кол-во этапов | Уровень |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| 1 | Высшая проба | Математика | 2026-11-25 | 2026-12-01 | 2026-12-05 14:00 | 2027-02-05 |  |  | 2026-12-07 18:00 |  |  |  | Дистанционно | Очно |  |  | 2 | I |"></textarea>
   <div class="modes">
     <label><input type="radio" name="mdMode" value="append" checked> Дописать к списку</label>
     <label><input type="radio" name="mdMode" value="replace"> Заменить весь список</label>
@@ -388,8 +393,9 @@ const state = {
 };
 const roundNumbers = [1, 2, 3, 4];
 const stageField = round => `stage${round}_date`;
+const stageEndField = round => `stage${round}_end`;
 const stageFormatField = round => `stage${round}_format`;
-const dateFields = ['reg_start', 'reg_end', ...roundNumbers.map(stageField), 'final_date'];
+const dateFields = ['reg_start', 'reg_end', ...roundNumbers.map(stageField), ...roundNumbers.map(stageEndField), 'final_date'];
 
 /* ================= УТИЛИТЫ ================= */
 const $  = s => document.querySelector(s);
@@ -620,17 +626,36 @@ function stageFormatSelect(row, round) {
   </select>`;
 }
 
-function dateCell(r, f, round = null) {
-  if (round && round > Number(r.stages_count)) {
+function datePair(r, field, dateLabel, timeLabel, timeHint) {
+  const value = r[field];
+  return `<div class="datepair">
+    <input type="date" class="ci di" data-f="${field}" aria-label="${dateLabel}" value="${dOf(value) ?? ''}">
+    <input type="time" class="ci ti" data-f="${field}__t" aria-label="${timeLabel}" value="${tOf(value)}" title="${timeHint}">
+  </div>`;
+}
+
+function dateCell(r, field) {
+  const label = field === 'reg_start' ? 'Начало регистрации' : 'Окончание регистрации';
+  return `<td class="c-date">
+    ${datePair(r, field, `Дата: ${label}`, `Время: ${label}`, 'Пусто = 23:59')}
+    <span class="hint-unspec" ${r[field] ? 'hidden' : ''}>Дата уточняется</span>
+  </td>`;
+}
+
+function roundCell(r, round) {
+  if (round > Number(r.stages_count)) {
     return '<td class="c-date round-inactive" title="Тур не проводится">—</td>';
   }
-  const v = r[f] || '';
-  const label = round ? `${round} тур` : (f === 'reg_start' ? 'Начало регистрации' : 'Окончание регистрации');
-  return `<td class="c-date"><div class="datepair">
-      <input type="date" class="ci di" data-f="${f}" aria-label="Дата: ${label}" value="${dOf(v) ?? ''}">
-      <input type="time" class="ci ti" data-f="${f}__t" aria-label="Время: ${label}" value="${tOf(v)}" title="Пусто = 23:59">
-    </div><span class="hint-unspec" ${v ? 'hidden' : ''}>Дата уточняется</span>
-    ${round ? stageFormatSelect(r, round) : ''}</td>`;
+  return `<td class="c-date">
+    <div class="round-endpoint"><span>Начало</span>
+      ${datePair(r, stageField(round), `Дата начала: ${round} тур`, `Время начала: ${round} тур`,
+        'Без времени: 00:00 для периода, 23:59 для одной даты')}
+    </div>
+    <div class="round-endpoint"><span>Окончание</span>
+      ${datePair(r, stageEndField(round), `Дата окончания: ${round} тур`, `Время окончания: ${round} тур`, 'Пусто = 23:59')}
+    </div>
+    ${stageFormatSelect(r, round)}
+  </td>`;
 }
 
 function rowTR(r, n) {
@@ -644,7 +669,7 @@ function rowTR(r, n) {
       <button class="del" aria-label="Удалить строку">✕</button></div></td>
     ${dateCell(r,'reg_start')}${dateCell(r,'reg_end')}
     <td><select class="ci" data-f="stages_count" aria-label="Количество этапов">${options.map(x=>`<option ${+r.stages_count===x?'selected':''}>${x}</option>`).join('')}</select></td>
-    ${roundNumbers.map(round => dateCell(r, stageField(round), round)).join('')}
+    ${roundNumbers.map(round => roundCell(r, round)).join('')}
     <td style="text-align:center"><button class="lvl-badge l${+r.lvl}">У${+r.lvl}</button>
       <select class="ci" data-f="lvl" aria-label="Уровень" hidden>${[1,2,3].map(x=>`<option ${+r.lvl===x?'selected':''}>${x}</option>`).join('')}</select></td>
   </tr>`;
@@ -700,7 +725,7 @@ $('#listBody').addEventListener('change', async e=>{
     patchRow(j.row);
     if (f === 'stages_count') {
       const cells = document.createElement('tr');
-      cells.innerHTML = roundNumbers.map(round => dateCell(j.row, stageField(round), round)).join('');
+      cells.innerHTML = roundNumbers.map(round => roundCell(j.row, round)).join('');
       Array.from(cells.cells).forEach((cell, i) => tr.cells[i + 6].replaceWith(cell));
       inp.value = j.row.stages_count;
     } else if (f === 'lvl') {
@@ -711,13 +736,14 @@ $('#listBody').addEventListener('change', async e=>{
       inp.hidden = true;
       badge.focus();
     } else if (dateFields.includes(f)) {
-      const cell = inp.closest('td');
-      cell.querySelector('.hint-unspec').hidden = Boolean(j.row[f]);
-      // Keep focus and any newer edit in the same cell.
-      if (!j.row[f] && !cell.querySelector('.di').value) cell.querySelector('.ti').value = '';
+      const hint = inp.closest('td').querySelector('.hint-unspec');
+      if (hint) hint.hidden = Boolean(j.row[f]);
+      // Keep focus and any newer edit in the same pair.
+      const pair = inp.closest('.datepair');
+      if (!j.row[f] && !pair.querySelector('.di').value) pair.querySelector('.ti').value = '';
     }
     renderStats();
-    if (f.endsWith('_format') && $('#view-stages').classList.contains('active')) renderStages();
+    if ($('#view-stages').classList.contains('active')) renderStages();
   } catch (err) {
     toast(err.message);
     if (pendingRowEdits.get(id) === request && original && tr.isConnected) {
@@ -794,15 +820,24 @@ function roundFormat(value) {
 }
 
 function roundsFor(row) {
-  return roundNumbers.filter(round => round <= Number(row.stages_count)).map(round => ({
-    row, round, date: row[stageField(round)], format: roundFormat(row[stageFormatField(round)] || ''),
-    attended: Boolean(row.stage_attendance & (1 << (round - 1)))
-  }));
+  return roundNumbers.filter(round => round <= Number(row.stages_count)).map(round => {
+    const from = row[stageField(round)], to = row[stageEndField(round)];
+    const start = from && to && !tOf(from) ? `${dOf(from)}T00:00:00` : (from || to);
+    return {row, round, from, to, start, end: to || from,
+      format: roundFormat(row[stageFormatField(round)] || ''),
+      attended: Boolean(row.stage_attendance & (1 << (round - 1)))};
+  });
 }
 
-const byStageDate = (a, b) => a.date.localeCompare(b.date) || a.round - b.round;
+function fmtRoundPeriod({from, to, start, end}) {
+  if (!from || !to || from === to) return fmtDate(from || to);
+  if (dOf(from) !== dOf(to)) return `${fmtDate(from)} — ${fmtDate(to)}`;
+  return `${fmtDate(dOf(from))} · ${start.slice(11,16)}–${end.slice(11,16)} МСК`;
+}
+
+const byStageDate = (a, b) => a.start.localeCompare(b.start) || a.round - b.round;
 function upcomingRound(rounds, now) {
-  return rounds.filter(r => r.date && stageTime(r.date) >= now).sort(byStageDate)[0];
+  return rounds.filter(r => r.end && stageTime(r.end) >= now).sort(byStageDate)[0];
 }
 
 function toggleButton(button, on, className) {
@@ -839,13 +874,16 @@ function renderStages() {
 }
 
 function stageCard(tone, title, entries, empty) {
-  const rows = entries.map(({row, round, date, format}, i) => {
+  const now = stageNow();
+  const rows = entries.map((event, i) => {
+    const {row, round, start, end, format} = event;
+    const ongoing = start && end && stageTime(start) <= now && stageTime(end) > now;
     const [base, profile] = splitProfile(row.name);
     const check = round ? ckBox(row, round) : '';
     return `<tr><td class="hn">${i + 1}</td>
       <td class="hname"><b>${esc(base)}</b> ${profile ? `<em style="--subj:${SUBJ[subjectOf(row.name)].d}">(${esc(profile)})</em>` : ''}
-        <small>${round ? `${round} тур${format.label ? ` · ${esc(format.label)}` : ''}` : `Всего этапов: ${row.stages_count}`}</small></td>
-      <td class="hdate">${round ? fmtDate(date) : 'Тур не проводится'}</td><td>${check}</td></tr>`;
+        <small>${round ? `${round} тур${format.label ? ` · ${esc(format.label)}` : ''}${ongoing ? ' · Идёт сейчас' : ''}` : `Всего этапов: ${row.stages_count}`}</small></td>
+      <td class="hdate">${round ? fmtRoundPeriod(event) : 'Тур не проводится'}</td><td>${check}</td></tr>`;
   }).join('');
   const body = rows ? `<table aria-label="${title}"><tbody>${rows}</tbody></table>` : `<div class="empty">${empty}</div>`;
   return cardFrame(tone, '', title, entries.length, body);
@@ -859,28 +897,28 @@ function renderStageSummary() {
     if (nearest) {
       const next = upcomingRound(rounds, now);
       if (next) place(next);
-      rounds.filter(r => r.date && stageTime(r.date) < now && stageTime(r.date) >= now - DAY_MS).forEach(place);
-      if (!next && rounds.some(r => !r.date)) {
-        undated.push(rounds.find(r => !r.date));
+      rounds.filter(r => r.end && stageTime(r.end) < now && stageTime(r.end) >= now - DAY_MS).forEach(place);
+      if (!next && rounds.some(r => !r.start)) {
+        undated.push(rounds.find(r => !r.start));
       }
     } else {
       const round = rounds.find(r => r.round === Number(state.stageFilter));
-      if (round?.date) place(round);
+      if (round?.start) place(round);
       else undated.push(round ?? {row});
     }
   }
 
   function place(round) {
-    const delta = stageTime(round.date) - now;
-    if (delta < 0) (round.attended ? attended : missed).push(round);
+    const delta = stageTime(round.start) - now;
+    if (stageTime(round.end) < now) (round.attended ? attended : missed).push(round);
     else if (delta <= DAY_MS) urgent.push(round);
     else if (delta <= 7 * DAY_MS) soon.push(round);
     else later.push(round);
   }
 
   [urgent, soon, later].forEach(rows => rows.sort(byStageDate));
-  [missed, attended].forEach(rows => rows.sort((a, b) => byStageDate(b, a)));
-  const urgentCard = stageCard('urgent', 'В ближайшие 24 часа', urgent, 'Туров в ближайшие 24 часа нет.');
+  [missed, attended].forEach(rows => rows.sort((a, b) => b.end.localeCompare(a.end)));
+  const urgentCard = stageCard('urgent', 'Сейчас и в ближайшие 24 часа', urgent, 'Туров в ближайшие 24 часа нет.');
   const missedCard = stageCard('missed', 'Пропустил', missed, 'Пропущенных туров нет.');
   const soonCard = stageCard('soon', 'В ближайшие 7 дней', soon, 'Других туров в ближайшие 7 дней нет.');
   $('#stageSummary').innerHTML = urgentCard + (missed.length ? missedCard + soonCard : soonCard + missedCard)
@@ -907,7 +945,7 @@ $('#stageSummary').addEventListener('change', async e => {
   }
 });
 
-const stageHint = 'Нажмите на отметку тура, чтобы увидеть дату и формат.';
+const stageHint = 'Нажмите на отметку тура, чтобы увидеть даты, время и формат.';
 $('#stageGantt').addEventListener('click', e => {
   const marker = e.target.closest('[data-stage-detail]');
   if (marker) $('#stageHint').textContent = marker.dataset.stageDetail;
@@ -919,7 +957,7 @@ function renderStageSchedule() {
     const rounds = roundsFor(row);
     const next = filter === 'next' ? upcomingRound(rounds, now) : null;
     const events = filter === 'next' ? (next ? [next] : [])
-      : rounds.filter(r => r.date && (filter === 'all' || r.round === Number(filter))).sort(byStageDate);
+      : rounds.filter(r => r.start && (filter === 'all' || r.round === Number(filter))).sort(byStageDate);
     return {row, events};
   }).filter(entry => entry.events.length).sort((a, b) => byStageDate(a.events[0], b.events[0]));
   const legend = $('#stageLegend');
@@ -930,17 +968,21 @@ function renderStageSchedule() {
   $('#stageHint').textContent = stageHint;
   $('#stageHint').hidden = !entries.length;
 
-  const dates = entries.flatMap(entry => entry.events.map(event => dOf(event.date)));
+  const dates = entries.flatMap(entry => entry.events.flatMap(event => [dOf(event.start), dOf(event.end)]));
   renderTimeline($('#stageGantt'), dates, ({min, ppd}) => entries.map(({row, events}) => {
     const lanes = [];
-    const markers = events.map(({round, date, format}) => {
-      const left = (dDays(min, dOf(date)) + 0.5) * ppd;
-      // Keep same-day tours and adjacent markers readable at wider date ranges.
-      const free = lanes.findIndex(last => left - last >= 25);
+    const markers = events.map(event => {
+      const {round, start, end, format} = event;
+      const left = (dDays(min, dOf(start)) + 0.5) * ppd - 11.5;
+      const span = dDays(dOf(start), dOf(end));
+      const width = span * ppd + 23;
+      // Tours on the same or overlapping days get separate lanes.
+      const free = lanes.findIndex(right => left >= right + 2);
       const lane = free === -1 ? lanes.length : free;
-      lanes[lane] = left;
-      const detail = esc(`${row.name} · ${round} тур · ${fmtDate(date)} · ${format.label || 'Формат уточняется'}`);
-      return `<button class="g-stage${format.remote ? ' is-remote' : ''}" style="left:${left}px;top:${9 + lane * 27}px"
+      lanes[lane] = left + width;
+      const detail = esc(`${row.name} · ${round} тур · ${fmtRoundPeriod(event)} · ${format.label || 'Формат уточняется'}`);
+      return `<button class="g-stage${span ? ' is-range' : ''}${format.remote ? ' is-remote' : ''}"
+        style="left:${left}px;top:${9 + lane * 27}px;width:${width}px"
         data-stage-detail="${detail}" aria-label="${detail}" title="${detail}">${round}</button>`;
     }).join('');
     return timelineRow(row, markers, '', Math.max(49, lanes.length * 27 + 17));
