@@ -78,18 +78,18 @@ button{cursor:pointer}
 .stage-controls{flex-direction:column;align-items:flex-start;gap:12px}
 #view-stages:has(#stageSchedule[hidden]) .stage-controls{max-width:900px;margin-inline:auto}
 .stage-controls .toolbar{margin:0}
-#view-stages:has(#stageSchedule[hidden]) #stageMode{box-shadow:inset 2px 2px 5px #34483b25,inset -2px -2px 5px #fff}
+#view-stages:has(#stageSchedule[hidden]) #stageMode{}
 #view-stages:has(#stageSchedule[hidden]) #stageMode .on{box-shadow:1px 2px 4px #34483b26}
-#view-stages:has(#stageSchedule[hidden]) #stageFilters .chip{box-shadow:2px 3px 6px #34483b1b,-2px -2px 5px #fff}
+#view-stages:has(#stageSchedule[hidden]) #stageFilters .chip{box-shadow: 0 4px 14px #17272014;}
 #view-stages:has(#stageSchedule[hidden]) #stageFilters .is-pressed{
   box-shadow:inset 2px 2px 4px #34483b2b,inset -2px -2px 5px #ffffffad
 }
 .chip{display:inline-flex;align-items:center;gap:6px;min-height:38px;padding:6px 12px;
-  border:1px solid var(--line);border-radius:100px;background:var(--panel);color:var(--ink2);font-size:13px;font-weight:650}
+  border:none;border-radius:100px;background:var(--panel);color:var(--ink2);font-size:13px;font-weight:650}
 .chip:hover,.chip.is-pressed{border-color:#8bb69f;background:var(--green-soft);color:var(--green)}
 .chip .cdot,.lg i{width:8px;height:8px;border-radius:50%;background:var(--cc,var(--gray))}
-.seg{display:inline-flex;gap:2px;padding:3px;border:1px solid var(--line);border-radius:9px;background:#ebefeb}
-.seg button{min-height:34px;padding:5px 12px;border:1px solid transparent;border-radius:6px;
+.seg{display:inline-flex;gap:2px;padding:3px;border-radius:20px;background:#ebefeb}
+.seg button{min-height:34px;padding:5px 12px;border:1px solid transparent;border-radius:20px;
   background:transparent;color:var(--mut);font-size:13px;font-weight:650}
 .seg button.on{border-color:var(--line);background:var(--panel);color:var(--ink)}
 
@@ -135,7 +135,7 @@ select.round-format{display:block;width:100%;max-width:196px;margin-top:6px}
 .home-wrap{max-width:900px;margin-inline:auto;display:grid;gap:17px}
 .card{
   --card-top:#f9faf7;--card-bottom:#ecf0eb;--card-edge:#dce3dd;--card-shadow:#34483b22;
-  padding:16px 18px;border:1px solid var(--card-edge);border-radius:17px;
+  padding:16px 18px;border:none;border-radius:17px;
   background:linear-gradient(148deg,var(--card-top),var(--card-bottom));
   box-shadow:5px 6px 13px var(--card-shadow),-4px -4px 10px #ffffffbc,inset 0 1px 1px #fff
 }
