@@ -185,13 +185,20 @@ function parse_md_table(string $text): array {
 
         $numbered = count($c) >= 13;
         $perRoundFormat = count($c) >= 15;
-        $countColumn = $perRoundFormat ? 10 : ($numbered ? 8 : 6);
+        $hasIntervals = count($c) >= 19;
+        $formatOffset = $hasIntervals ? 4 : 0;
+        $countColumn = $perRoundFormat ? 10 + $formatOffset : ($numbered ? 8 : 6);
         $count = max(1, min(4, roman_int($rest[$countColumn] ?? '2')));
         $dates = array_fill(1, 4, null);
+        $ends = array_fill(1, 4, null);
         $formats = array_fill(1, 4, '');
         if ($numbered) {
             for ($round = 1; $round <= $count; $round++) {
                 $dates[$round] = parse_olymp_date($rest[$round + 1] ?? '');
+                if ($hasIntervals) {
+                    $ends[$round] = parse_olymp_date($rest[$round + 5] ?? '');
+                    validate_round_period($dates[$round], $ends[$round]);
+                }
             }
         } else {
             $dates[1] = parse_olymp_date($rest[2] ?? '');
@@ -200,7 +207,7 @@ function parse_md_table(string $text): array {
 
         if ($perRoundFormat) {
             for ($round = 1; $round <= $count; $round++) {
-                $formats[$round] = $rest[$round + 5] ?? '';
+                $formats[$round] = $rest[$round + 5 + $formatOffset] ?? '';
             }
         } else {
             $formats[1] = $rest[$numbered ? 6 : 3] ?? '';
@@ -215,6 +222,7 @@ function parse_md_table(string $text): array {
             'reg_start' => parse_olymp_date($rest[0] ?? ''),
             'reg_end' => parse_olymp_date($rest[1] ?? ''),
             'dates' => $dates,
+            'ends' => $ends,
             'formats' => $formats,
             'stages_count' => $count,
             'lvl' => max(1, min(3, roman_int($rest[$countColumn + 1] ?? '1'))),
@@ -228,14 +236,59 @@ function normalize_round_format(string $format): string {
     return in_array($format, ['—', '–', '-'], true) ? '' : mb_substr($format, 0, 64);
 }
 
+function validate_round_period(?string $start, ?string $end): void {
+    if (!$start || !$end) return;
+    // The existing date-only convention stores 23:59. A range starts at midnight on that date.
+    $startBoundary = str_ends_with($start, ' 23:59:00') ? substr($start, 0, 10) : $start;
+    if ($end < $startBoundary) {
+        throw new DomainException('Окончание тура должно быть не раньше начала.');
+    }
+}
+
+function update_round_endpoint(PDO $pdo, int $id, string $field, ?string $value): void {
+    $pdo->beginTransaction();
+    try {
+        $select = $pdo->prepare('SELECT * FROM olympiads WHERE id=? FOR UPDATE');
+        $select->execute([$id]);
+        $row = $select->fetch();
+        if ($row) {
+            $count = (int)$row['stages_count'];
+            $legacyFinal = $field === 'final_date';
+            $round = $legacyFinal ? $count : (int)$field[5];
+            if ($round >= 1 && $round <= min($count, 4)) {
+                $startField = "stage{$round}_date";
+                $endField = "stage{$round}_end";
+                $isEnd = $field === $endField;
+                $start = $isEnd ? $row[$startField] : $value;
+                $end = $isEnd ? $value : $row[$endField];
+                validate_round_period($start, $end);
+                $endpoint = $isEnd ? $endField : $startField;
+                $final = $round === $count ? ($start ?? $end) : $row['final_date'];
+                $pdo->prepare("UPDATE olympiads SET `$endpoint`=?, final_date=? WHERE id=?")
+                    ->execute([$value, $final, $id]);
+            } elseif ($legacyFinal) {
+                $pdo->prepare('UPDATE olympiads SET final_date=? WHERE id=?')->execute([$value, $id]);
+            }
+        }
+        $pdo->commit();
+    } catch (Throwable $e) {
+        $pdo->rollBack();
+        throw $e;
+    }
+}
+
 function markdown_export(array $rows): string {
-    $out = "| № | Олимпиада | Профиль | Начало регистрации | Окончание регистрации | Дата 1 тура | Дата 2 тура | Дата 3 тура | Дата 4 тура | Формат 1 тура | Формат 2 тура | Формат 3 тура | Формат 4 тура | Кол-во этапов | Уровень |\n";
-    $out .= '|' . implode('|', array_fill(0, 15, '---')) . "|\n";
+    $out = "| № | Олимпиада | Профиль | Начало регистрации | Окончание регистрации | Начало 1 тура | Начало 2 тура | Начало 3 тура | Начало 4 тура | Конец 1 тура | Конец 2 тура | Конец 3 тура | Конец 4 тура | Формат 1 тура | Формат 2 тура | Формат 3 тура | Формат 4 тура | Кол-во этапов | Уровень |\n";
+    $out .= '|' . implode('|', array_fill(0, 19, '---')) . "|\n";
     foreach (array_values($rows) as $i => $r) {
         [$title, $profile] = split_name((string)$r['name']);
         $cells = [$i + 1, $title, $profile, fmt_md_date($r['reg_start']), fmt_md_date($r['reg_end'])];
         for ($round = 1; $round <= 4; $round++) {
             $cells[] = $round <= $r['stages_count'] ? fmt_md_date($r["stage{$round}_date"]) : '—';
+        }
+        for ($round = 1; $round <= 4; $round++) {
+            $end = $r["stage{$round}_end"];
+            $cells[] = $round <= $r['stages_count'] && $end ? fmt_md_date($end) : '';
         }
         for ($round = 1; $round <= 4; $round++) {
             $cells[] = $round <= $r['stages_count'] ? $r["stage{$round}_format"] : '';
@@ -303,32 +356,25 @@ try {
             } elseif (in_array($f, $DT, true)) {
                 $v = norm_dt((string)($_POST['value'] ?? ''));
                 db()->prepare("UPDATE olympiads SET `$f`=? WHERE id=?")->execute([$v, $id]);
-            } elseif (($round = array_search($f, $roundFields, true)) !== false) {
-                $round++;
-                $v = norm_dt((string)($_POST['value'] ?? ''));
-                db()->prepare("UPDATE olympiads SET `$f`=?, final_date=IF(stages_count=?, ?, final_date)
-                    WHERE id=? AND stages_count>=?")->execute([$v, $round, $v, $id, $round]);
-            } elseif ($f === 'final_date') {
-                $v = norm_dt((string)($_POST['value'] ?? ''));
-                db()->prepare('UPDATE olympiads SET final_date=?,
-                    stage1_date=IF(stages_count=1, ?, stage1_date),
-                    stage2_date=IF(stages_count=2, ?, stage2_date),
-                    stage3_date=IF(stages_count=3, ?, stage3_date),
-                    stage4_date=IF(stages_count=4, ?, stage4_date)
-                    WHERE id=?')->execute([$v, $v, $v, $v, $v, $id]);
+            } elseif ($f === 'final_date' || preg_match('/^stage[1-4]_(date|end)$/D', $f)) {
+                update_round_endpoint(db(), $id, $f, norm_dt((string)($_POST['value'] ?? '')));
             } elseif ($f === 'stages_count') {
                 $count = max(1, min(4, (int)($_POST['value'] ?? 1)));
                 $lastField = $roundFields[$count - 1];
+                $lastEnd = "stage{$count}_end";
                 $lastFormat = $formatFields[$count - 1];
-                db()->prepare("UPDATE olympiads SET stages_count=?, final_date=`$lastField`, final_format=`$lastFormat`,
+                db()->prepare("UPDATE olympiads SET stages_count=?, final_date=COALESCE(`$lastField`, `$lastEnd`), final_format=`$lastFormat`,
                     stage2_date=IF(? >= 2, stage2_date, NULL),
                     stage3_date=IF(? >= 3, stage3_date, NULL),
                     stage4_date=IF(? >= 4, stage4_date, NULL),
+                    stage2_end=IF(? >= 2, stage2_end, NULL),
+                    stage3_end=IF(? >= 3, stage3_end, NULL),
+                    stage4_end=IF(? >= 4, stage4_end, NULL),
                     stage2_format=IF(? >= 2, stage2_format, ''),
                     stage3_format=IF(? >= 3, stage3_format, ''),
                     stage4_format=IF(? >= 4, stage4_format, ''),
                     stage_attendance=stage_attendance & ? WHERE id=?")
-                    ->execute([$count, $count, $count, $count, $count, $count, $count, (1 << $count) - 1, $id]);
+                    ->execute([$count, $count, $count, $count, $count, $count, $count, $count, $count, $count, (1 << $count) - 1, $id]);
             } elseif ($f === 'lvl') {
                 $level = max(1, min(3, (int)($_POST['value'] ?? 1)));
                 db()->prepare('UPDATE olympiads SET lvl=? WHERE id=?')->execute([$level, $id]);
@@ -387,13 +433,16 @@ try {
                     if ($mode === 'replace') $pdo->exec('DELETE FROM olympiads');
                     $ins = $pdo->prepare('INSERT INTO olympiads
                         (name, reg_start, reg_end, stage1_date, stage2_date, stage3_date, stage4_date,
+                         stage1_end, stage2_end, stage3_end, stage4_end,
                          stage1_format, stage2_format, stage3_format, stage4_format, final_date, final_format,
                          stages_count, lvl)
-                        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)');
+                        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)');
                     foreach ($parsed as $r) {
+                        $last = $r['stages_count'];
                         $ins->execute([
                             $r['name'], $r['reg_start'], $r['reg_end'], ...array_values($r['dates']),
-                            ...array_values($r['formats']), $r['dates'][$r['stages_count']], $r['formats'][$r['stages_count']],
+                            ...array_values($r['ends']), ...array_values($r['formats']),
+                            $r['dates'][$last] ?? $r['ends'][$last], $r['formats'][$last],
                             $r['stages_count'], $r['lvl'],
                         ]);
                     }
@@ -409,6 +458,8 @@ try {
         default:
             out(['ok' => false, 'error' => 'неизвестное действие']);
     }
+} catch (DomainException $e) {
+    out(['ok' => false, 'error' => $e->getMessage()]);
 } catch (Throwable $e) {
     out(['ok' => false, 'error' => 'БД: ' . $e->getMessage()]);
 }

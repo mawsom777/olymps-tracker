@@ -90,4 +90,10 @@ SET stage1_format = CASE WHEN stages_count = 1 AND stage1_format = '' THEN final
     stage3_format = CASE WHEN stages_count = 3 THEN final_format ELSE '' END,
     stage4_format = CASE WHEN stages_count = 4 THEN final_format ELSE '' END;
 
+ALTER TABLE olympiads
+  ADD COLUMN stage1_end DATETIME DEFAULT NULL,
+  ADD COLUMN stage2_end DATETIME DEFAULT NULL,
+  ADD COLUMN stage3_end DATETIME DEFAULT NULL,
+  ADD COLUMN stage4_end DATETIME DEFAULT NULL;
+
 -- Dump completed on 2026-11-25 13:52:19
