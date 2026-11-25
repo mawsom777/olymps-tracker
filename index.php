@@ -87,7 +87,7 @@ button{cursor:pointer}
 .chip{display:inline-flex;align-items:center;gap:6px;min-height:38px;padding:6px 12px;
   border:none;border-radius:100px;background:var(--panel);color:var(--ink2);font-size:13px;font-weight:650}
 .chip:hover,.chip.is-pressed{border-color:#8bb69f;background:var(--green-soft);color:var(--green)}
-.chip .cdot,.subject-label::before,.lg i{width:8px;height:8px;border-radius:50%;background:var(--cc,var(--gray))}
+.chip .cdot,.lg i{width:8px;height:8px;border-radius:50%;background:var(--cc,var(--gray))}
 .seg{display:inline-flex;gap:2px;padding:3px;border-radius:20px;background:#ebefeb}
 .seg button{min-height:34px;padding:5px 12px;border:1px solid transparent;border-radius:20px;
   background:transparent;color:var(--mut);font-size:13px;font-weight:650}
@@ -108,14 +108,11 @@ table.grid{width:100%;min-width:1690px;border-spacing:0}
 .grid .c-num,.grid .c-title{position:sticky;left:0;z-index:2;background:var(--panel)}
 .grid .c-title{left:40px;border-right:1px solid var(--line)}
 .grid thead .c-num,.grid thead .c-title{z-index:4;background:#eef1ed}
-.subject-label{display:inline-flex;align-items:center;gap:6px;margin-top:5px;padding:2px 7px;
-  border-radius:100px;background:color-mix(in srgb,var(--cc) 30%,var(--panel));
-  color:var(--subject-ink);font-size:11px;font-weight:700;line-height:1.4}
-.subject-label::before{content:"";flex:none}
 .c-profile{min-width:155px}
 .c-date{min-width:195px}
 .ci{width:100%;min-height:34px;padding:5px 7px;border:1px solid var(--line);border-radius:6px;background:var(--panel);font-size:13px}
 .ci::placeholder{color:var(--mut)}
+.subject-profile{border-inline-start:5px solid var(--subject-color)}
 .datepair,.cell-name{display:flex;gap:5px;align-items:center}
 .datepair .ci{min-width:0;font:12px var(--mono)}
 .datepair .di{width:115px}
@@ -662,22 +659,18 @@ function roundCell(r, round) {
   </td>`;
 }
 
-function subjectLabel(subject) {
-  const {c, d} = SUBJ[subject];
-  return `<span class="subject-label" style="--cc:${c};--subject-ink:${d}">${subject}</span>`;
-}
-
 function rowTR(r, n) {
   const [title, prof] = splitProfile(r.name);
+  const subject = subjectOf(r.name);
   const options = Number(r.stages_count) > 4 ? [...roundNumbers, Number(r.stages_count)] : roundNumbers;
   return `<tr data-id="${r.id}">
     <td class="c-num">${n}</td>
     <td class="c-title">
       <input class="ci" data-f="title" aria-label="Олимпиада" value="${esc(title)}" placeholder="Олимпиада">
-      ${subjectLabel(subjectOf(r.name))}
     </td>
     <td class="c-profile"><div class="cell-name">
-      <input class="ci" data-f="profile" aria-label="Профиль" value="${esc(prof)}" placeholder="Профиль">
+      <input class="ci subject-profile" data-f="profile" aria-label="Профиль" title="Предмет: ${subject}"
+        style="--subject-color:${SUBJ[subject].c}" value="${esc(prof)}" placeholder="Профиль">
       <button class="del" aria-label="Удалить строку">✕</button></div></td>
     ${dateCell(r,'reg_start')}${dateCell(r,'reg_end')}
     <td><select class="ci" data-f="stages_count" aria-label="Количество этапов">${options.map(x=>`<option ${+r.stages_count===x?'selected':''}>${x}</option>`).join('')}</select></td>
@@ -745,8 +738,11 @@ $('#listBody').addEventListener('change', async e=>{
       if (state.filter && state.filter !== subject) {
         renderList();
       } else {
-        const label = $(`#listBody tr[data-id="${id}"] .subject-label`);
-        if (label) label.outerHTML = subjectLabel(subject);
+        const profile = $(`#listBody tr[data-id="${id}"] .subject-profile`);
+        if (profile) {
+          profile.style.setProperty('--subject-color', SUBJ[subject].c);
+          profile.title = `Предмет: ${subject}`;
+        }
       }
     } else if (f === 'lvl') {
       const badge = tr.querySelector('.lvl-badge');
