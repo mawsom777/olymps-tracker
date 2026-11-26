@@ -237,7 +237,10 @@ select.round-format{display:block;width:100%;max-width:196px;margin-top:6px}
 .g-stage:focus-visible,.g-stage:hover{z-index:3}
 .g-stage.is-remote,.lg-remote i{--remote-hatch:repeating-linear-gradient(-45deg,#17272039 0 2px,transparent 2px 6px)}
 .g-stage.is-remote{background-image:var(--remote-hatch),var(--event-fill)}
-.lg-remote i{width:14px;height:14px;border-radius:4px;border:1px solid #17272042;background:#e1ece6 var(--remote-hatch)}
+.lg-remote i,.lg-proctored i{width:14px;height:14px;border-radius:4px}
+.lg-remote i{border:1px solid #17272042;background:#e1ece6 var(--remote-hatch)}
+.g-stage.is-proctored,.lg-proctored i{border:2px dashed #624184}
+.lg-proctored i{background:#eee6f5}
 #stageHint{min-height:22px;margin:6px 0;color:var(--mut);font-size:12px}
 
 .dlg{width:min(720px,94vw);padding:18px;border:1px solid var(--line);border-radius:var(--radius-lg);background:var(--surface);
@@ -403,7 +406,7 @@ select.round-format{display:block;width:100%;max-width:196px;margin-top:6px}
   <p>Укажите число этапов от 1 до 4. Для однодневного тура достаточно одной даты. Пример даты со временем по МСК — «2026-12-05 14:00». Таблицы старых форматов тоже поддерживаются.</p>
   <textarea id="mdIn" rows="8" aria-label="Таблица Markdown" placeholder="| № | Олимпиада | Профиль | Начало регистрации | Окончание регистрации | Начало 1 тура | Начало 2 тура | Начало 3 тура | Начало 4 тура | Конец 1 тура | Конец 2 тура | Конец 3 тура | Конец 4 тура | Формат 1 тура | Формат 2 тура | Формат 3 тура | Формат 4 тура | Кол-во этапов | Уровень |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| 1 | Высшая проба | Математика | 2026-11-25 | 2026-12-01 | 2026-12-05 14:00 | 2027-02-05 |  |  | 2026-12-07 18:00 |  |  |  | Дистанционно | Очно |  |  | 2 | I |"></textarea>
+| 1 | Высшая проба | Математика | 2026-11-25 | 2026-12-01 | 2026-12-05 14:00 | 2027-02-05 |  |  | 2026-12-07 18:00 |  |  |  | Прокторинг | Очно |  |  | 2 | I |"></textarea>
   <div class="modes">
     <label><input type="radio" name="mdMode" value="append" checked> Дописать к списку</label>
     <label><input type="radio" name="mdMode" value="replace"> Заменить весь список</label>
@@ -661,7 +664,8 @@ function visibleRows(){
 function stageFormatSelect(row, round) {
   const field = stageFormatField(round);
   const format = row[field] || '';
-  const options = [['', 'Формат уточняется'], ['Очно', 'Очно'], ['Дистанционно', 'Дистанционно']];
+  const options = [['', 'Формат уточняется'], ['Очно', 'Очно'], ['Дистанционно', 'Дистанционно'],
+    ['Прокторинг', 'Прокторинг']];
   if (!options.some(([value]) => value === format)) options.push([format, format]);
   return `<select class="ci round-format" data-f="${field}" aria-label="Формат: ${round} тур">
     ${options.map(([value, label]) => `<option value="${esc(value)}" ${value === format ? 'selected' : ''}>${esc(label)}</option>`).join('')}
@@ -868,10 +872,11 @@ const stageTime = date => Date.parse(date + 'Z');
 const stageNow = () => stageTime(mskNowISO());
 
 function roundFormat(value) {
+  if (/проктор|proctor/iu.test(value)) return {mark: 'proctored', label: 'Прокторинг'};
   const remote = /дистанц|заочн|онлайн|online/iu.test(value);
   const onsite = /(?:^|[^а-яё])очн|офлайн|offline/iu.test(value);
   return {
-    remote: remote && !onsite,
+    mark: remote && !onsite ? 'remote' : '',
     label: remote && onsite ? 'Смешанный формат' : remote ? 'Дистанционно' : onsite ? 'Очно' : ''
   };
 }
@@ -893,8 +898,9 @@ function fmtRoundPeriod({from, to, start, end}) {
 }
 
 const byStageDate = (a, b) => a.start.localeCompare(b.start) || a.round - b.round;
-function upcomingRound(rounds, now) {
-  return rounds.filter(r => r.end && stageTime(r.end) >= now).sort(byStageDate)[0];
+const byStageEnd = (a, b) => a.end.localeCompare(b.end) || byStageDate(a, b);
+function upcomingRound(rounds, now, compare = byStageDate) {
+  return rounds.filter(r => r.end && stageTime(r.end) >= now).sort(compare)[0];
 }
 
 function toggleButton(button, on, className) {
@@ -952,7 +958,7 @@ function renderStageSummary() {
   for (const row of DATA) {
     const rounds = roundsFor(row);
     if (nearest) {
-      const next = upcomingRound(rounds, now);
+      const next = upcomingRound(rounds, now, byStageEnd);
       if (next) place(next);
       rounds.filter(r => r.end && stageTime(r.end) < now && stageTime(r.end) >= now - DAY_MS).forEach(place);
       if (!next && rounds.some(r => !r.start)) {
@@ -966,18 +972,18 @@ function renderStageSummary() {
   }
 
   function place(round) {
-    const delta = stageTime(round.start) - now;
-    if (stageTime(round.end) < now) (round.attended ? attended : missed).push(round);
+    const delta = stageTime(round.end) - now;
+    if (delta < 0) (round.attended ? attended : missed).push(round);
     else if (delta <= DAY_MS) urgent.push(round);
     else if (delta <= 7 * DAY_MS) soon.push(round);
     else later.push(round);
   }
 
-  [urgent, soon, later].forEach(rows => rows.sort(byStageDate));
+  [urgent, soon, later].forEach(rows => rows.sort(byStageEnd));
   [missed, attended].forEach(rows => rows.sort((a, b) => b.end.localeCompare(a.end)));
-  const urgentCard = stageCard('urgent', 'Сейчас и в ближайшие 24 часа', urgent, 'Туров в ближайшие 24 часа нет.');
+  const urgentCard = stageCard('urgent', 'Закроются в ближайшие 24 часа', urgent, 'За ближайшие 24 часа туры не закроются.');
   const missedCard = stageCard('missed', 'Пропустил', missed, 'Пропущенных туров нет.');
-  const soonCard = stageCard('soon', 'В ближайшие 7 дней', soon, 'Других туров в ближайшие 7 дней нет.');
+  const soonCard = stageCard('soon', 'Закроются в ближайшие 7 дней', soon, 'Других туров с окончанием в ближайшие 7 дней нет.');
   $('#stageSummary').innerHTML = urgentCard + (missed.length ? missedCard + soonCard : soonCard + missedCard)
     + (later.length ? stageCard('plain', 'Позже', later) : '')
     + (attended.length ? stageCard('plain', 'Участие отмечено', attended) : '')
@@ -1019,8 +1025,11 @@ function renderStageSchedule() {
   }).filter(entry => entry.events.length).sort((a, b) => byStageDate(a.events[0], b.events[0]));
   const legend = $('#stageLegend');
   renderLegend(legend, entries.map(entry => entry.row));
-  if (entries.some(({events}) => events.some(event => event.format.remote))) {
-    legend.insertAdjacentHTML('beforeend', '<span class="lg lg-remote"><i aria-hidden="true"></i>Дистанционно</span>');
+  const marks = new Set(entries.flatMap(({events}) => events.map(event => event.format.mark)));
+  for (const [mark, label] of [['remote', 'Дистанционно'], ['proctored', 'Прокторинг']]) {
+    if (marks.has(mark)) {
+      legend.insertAdjacentHTML('beforeend', `<span class="lg lg-${mark}"><i aria-hidden="true"></i>${label}</span>`);
+    }
   }
   $('#stageHint').textContent = stageHint;
   $('#stageHint').hidden = !entries.length;
@@ -1038,7 +1047,7 @@ function renderStageSchedule() {
       const lane = free === -1 ? lanes.length : free;
       lanes[lane] = left + width;
       const detail = esc(`${row.name} · ${round} тур · ${fmtRoundPeriod(event)} · ${format.label || 'Формат уточняется'}`);
-      return `<button class="g-stage${span ? ' is-range' : ''}${format.remote ? ' is-remote' : ''}"
+      return `<button class="g-stage${span ? ' is-range' : ''}${format.mark ? ` is-${format.mark}` : ''}"
         style="left:${left}px;top:${9 + lane * 27}px;width:${width}px"
         data-stage-detail="${detail}" aria-label="${detail}" title="${detail}">${round}</button>`;
     }).join('');
